@@ -54,8 +54,8 @@ One command. Smart filtering. Auto-split. Clipboard copy. Done.
 ### Quick (any OS)
 
 ```bash
-git clone https://github.com/Heysh1n/sfc.git
-cd your-project
+git clone https://github.com/Heysh1n/Speecher-py.git
+cd Speecher-py
 python /path/to/sfc
 ```
 
