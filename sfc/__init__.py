@@ -3,3 +3,5 @@
 from .version import VERSION
 
 __version__: str = VERSION
+
+# macOS Edition maintained by Polat Sakarya
