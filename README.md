@@ -1,5 +1,7 @@
 # 🔧 Smart File Collector (sfc)
 
+Maintained and optimized for macOS by @polatsakarya35 | Based on the original engine by @Heysh1n.
+
 A zero-dependency CLI/TUI tool that collects project source code into a single
 structured text file — built specifically for feeding codebases into AI chats
 (ChatGPT, Claude, Gemini).
@@ -51,6 +53,7 @@ One command. Smart filtering. Auto-split. Clipboard copy. Done.
 
 ## 🆕 What's New in v3.0.0 (macOS Edition)
 
+- ✨ macOS Edition features developed by Polat Sakarya.
 - **Native macOS config integration:** settings now default to
   `~/Library/Application Support/sfc/cfg.setting.json` on macOS, while
   preserving XDG fallback and existing Windows/Linux behavior.
@@ -424,4 +427,4 @@ python build.py clean
 
 ## 📜 License
 
-[MIT](LICENSE) — © 2026 [Heysh1n](https://github.com/Heysh1n)
+MIT License — © 2026 Heysh1n & Contributors
