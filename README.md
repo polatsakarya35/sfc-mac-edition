@@ -69,6 +69,8 @@ One command. Smart filtering. Auto-split. Clipboard copy. Done.
 - **Manual validation guide added:** reproducible macOS checks are documented in
   `docs/macos-manual-test.md` (config path, updater, large clipboard copy, TUI
   resize scenarios).
+- **Maintenance credits:** macOS edition maintenance is led by Polat Sakarya,
+  based on the original project engine by Heysh1n.
 
 ---
 
