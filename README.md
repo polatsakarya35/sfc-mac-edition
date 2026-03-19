@@ -77,7 +77,12 @@ One command. Smart filtering. Auto-split. Clipboard copy. Done.
 ### Quick (any OS)
 
 ```bash
+# macOS (Optimized Edition)
+git clone https://github.com/polatsakarya35/sfc-mac-edition.git
+
+# Windows / Linux (Original Edition)
 git clone https://github.com/Heysh1n/sfc.git
+
 cd sfc
 python /path/to/sfc
 ```
