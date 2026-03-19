@@ -78,7 +78,10 @@ def _fetch(url: str) -> bytes:
 def _parse_remote_version(raw: bytes) -> str:
     """Extract VERSION = "x.y.z" from raw version.py bytes."""
     text: str = raw.decode("utf-8", errors="replace")
-    match = re.search(r'VERSION\s*[=:]\s*["\']([^"\']+)["\']', text)
+    match = re.search(
+        r'VERSION(?:\s*:\s*[^=]+)?\s*=\s*["\']([^"\']+)["\']',
+        text,
+    )
     if match:
         return match.group(1)
     return ""

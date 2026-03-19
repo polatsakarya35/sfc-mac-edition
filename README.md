@@ -44,8 +44,28 @@ One command. Smart filtering. Auto-split. Clipboard copy. Done.
 | **Native clipboard** | `pbcopy` · `clip.exe` · `wl-copy` · `xclip` · `xsel` — no pyperclip. |
 | **Presets** | Save & reuse file selections per project. |
 | **Self-updater** | One-click update from GitHub inside the TUI. |
-| **Persistent config** | Settings saved to `~/.config/sfc/cfg.setting.json`. |
+| **Persistent config** | Platform-aware path (`~/Library/Application Support/sfc` on macOS, XDG/APPDATA on others). |
 | **Dynamic collect** | Uncheck files in the final review before generating output. |
+
+---
+
+## 🆕 What's New in v3.0.0 (macOS Edition)
+
+- **Native macOS config integration:** settings now default to
+  `~/Library/Application Support/sfc/cfg.setting.json` on macOS, while
+  preserving XDG fallback and existing Windows/Linux behavior.
+- **Faster project scanning on APFS:** file traversal moved from `os.walk` to
+  `os.scandir`-based recursion for lower overhead and improved scan speed on
+  large trees.
+- **More robust `pbcopy` for large outputs:** clipboard copy now uses a safer
+  stdin streaming path on macOS, improving stability for 100K+ character
+  payloads.
+- **TUI rendering hardening on macOS terminals:** unicode width handling and
+  resize redraw behavior were improved for cleaner rendering in Terminal.app and
+  iTerm2.
+- **Manual validation guide added:** reproducible macOS checks are documented in
+  `docs/macos-manual-test.md` (config path, updater, large clipboard copy, TUI
+  resize scenarios).
 
 ---
 

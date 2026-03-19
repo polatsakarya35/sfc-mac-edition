@@ -1,0 +1,2556 @@
+══════════════
+📋 sfc [pick] (1/2)
+📅 19.03.2026 08:53:04
+📄 Files: 19
+══════════════
+
+┌────────────
+│ 🗂️  STRUCTURE
+├────────────
+│ 📦 sfc/
+│ ├── 📂 sfc/
+│ │   ├── 📂 tui/
+│ │   │   ├── 📄 __init__.py
+│ │   │   ├── 📄 base.py
+│ │   │   ├── 📄 curses_tui.py
+│ │   │   └── 📄 win_tui.py
+│ │   ├── 📄 __init__.py
+│ │   ├── 📄 __main__.py
+│ │   ├── 📄 app.py
+│ │   ├── 📄 clipboard.py
+│ │   ├── 📄 collector.py
+│ │   ├── 📄 config.py
+│ │   ├── 📄 patterns.py
+│ │   ├── 📄 updater.py
+│ │   └── 📄 version.py
+│ ├── 📄 build.py
+│ ├── 📄 LICENSE
+│ ├── 📄 Makefile
+│ ├── 📄 pyproject.toml
+│ ├── 📄 README.md
+│ └── 📄 requirements-build.txt
+└────────────
+
+┌─── 📄 [1/19] LICENSE
+MIT License
+
+Copyright (c) 2026 Heysh1n
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+└────────────────────────────────────────
+
+┌─── 📄 [2/19] Makefile
+# Makefile
+.PHONY: build clean install dev test
+
+# Build executable for current platform
+build:
+	python build.py all
+
+# Clean build artifacts
+clean:
+	python build.py clean
+	rm -rf __pycache__ fc/__pycache__ *.egg-info
+
+# Install as Python package (editable, for dev)
+dev:
+	pip install -e .
+
+# Install globally via pip
+install:
+	pip install .
+
+# Test run
+test:
+	python -m fc tree -s
+	@echo ""
+	python -m fc find "*.py"
+└────────────────────────────────────────
+
+┌─── 📄 [3/19] README.md
+# 🔧 Smart File Collector (sfc)
+
+A zero-dependency CLI/TUI tool that collects project source code into a single
+structured text file — built specifically for feeding codebases into AI chats
+(ChatGPT, Claude, Gemini).
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#)
+
+---
+
+## The Problem
+
+Manually copying dozens of source files into an AI chat is painful:
+
+- 📁 Project structure context is lost
+- 🗑️ Junk files (`.git`, `node_modules`, `.env`) pollute the context
+- ✂️ Character limits break long messages
+- ⏱️ The whole process takes forever
+
+## The Solution
+
+```bash
+python -m sfc
+# → Interactive TUI opens
+# → Select files with arrow keys + space
+# → Press Enter → structured output + clipboard
+```
+
+One command. Smart filtering. Auto-split. Clipboard copy. Done.
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **Zero dependencies** | Pure Python 3.10+ stdlib. No pip install needed. |
+| **Cross-platform** | Linux, macOS, Windows. Native TUI on all three. |
+| **Interactive TUI** | Arrow-key navigation, checkboxes, scrollable lists via `curses`/`msvcrt`. |
+| **Smart ignoring** | 80+ built-in ignore rules. Fully customisable in Settings. |
+| **Auto-split** | Splits output into parts when exceeding character limits. |
+| **Native clipboard** | `pbcopy` · `clip.exe` · `wl-copy` · `xclip` · `xsel` — no pyperclip. |
+| **Presets** | Save & reuse file selections per project. |
+| **Self-updater** | One-click update from GitHub inside the TUI. |
+| **Persistent config** | Settings saved to `~/.config/sfc/cfg.setting.json`. |
+| **Dynamic collect** | Uncheck files in the final review before generating output. |
+
+---
+
+## 📦 Installation
+
+### Quick (any OS)
+
+```bash
+git clone https://github.com/Heysh1n/sfc.git
+cd sfc
+python /path/to/sfc
+```
+
+### Linux / macOS
+
+```bash
+# Run directly
+python3 -m sfc
+
+# Or build a portable single-file archive
+python3 build.py
+./dist/sfc.pyz
+
+# Install globally
+cp dist/sfc.pyz ~/.local/bin/sfc
+chmod +x ~/.local/bin/sfc
+sfc  # works from anywhere
+```
+
+**Clipboard (Linux only):**
+
+```bash
+# Wayland
+sudo apt install wl-clipboard
+
+# X11
+sudo apt install xclip
+```
+
+### Windows
+
+```powershell
+python -m sfc
+
+# Or build
+python build.py
+python dist\sfc.pyz
+```
+
+Clipboard works automatically via `clip.exe`.
+
+---
+
+## 🚀 Quick Start
+
+### Interactive Mode (TUI)
+
+```bash
+python -m sfc
+```
+
+Opens a full-screen terminal interface:
+
+```
+  === Smart File Collector v3.0.0 ===
+  [D] my-project  |  [F] 42 files
+------------------------------------------------------------
+ > [D]  Browse & Select
+   [?]  Search by pattern
+   [>]  Quick pick (paste paths)
+   [=]  Collect ALL files
+   [B]  Presets
+   [T]  View tree
+   [S]  Settings
+   [H]  Help
+   [U]  Check for updates
+  ------------------------------
+   [v]  Collect selected (0)
+   [E]  Preview selected
+   [X]  Clear selection
+  ------------------------------
+   [x]  Exit
+
+  Up/Down:navigate  ENTER:select  q:quit
+```
+
+**Controls:**
+
+| Key | Action |
+|-----|--------|
+| ↑ / ↓ | Navigate |
+| SPACE | Toggle checkbox |
+| ENTER | Select / confirm |
+| ESC | Go back |
+| q | Quit |
+
+### CLI Mode (Scripting)
+
+```bash
+# Collect everything
+sfc all -o context.txt
+
+# Pick specific files or patterns
+sfc pick src/main.py "src/config/*" "*.json"
+
+# Show tree with sizes
+sfc tree -s
+
+# Find files
+sfc find "*.service.ts"
+
+# Read paths from file
+sfc from paths.txt
+
+# Manage presets
+sfc preset save backend "src/models/*" "src/db/*"
+sfc preset backend
+sfc preset list
+```
+
+---
+
+## 🎯 CLI Reference
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| *(none)* | Launch interactive TUI |
+| `all` | Collect all project files |
+| `pick [files...]` | Collect by path or glob pattern |
+| `pick -` | Interactive multi-line path input |
+| `tree` | Display project structure |
+| `find <pattern>` | Find files matching a glob |
+| `from <file>` | Read paths from a text file |
+| `preset <action>` | Save / load / delete presets |
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-p, --path` | Target root directory | `.` |
+| `-o, --output` | Output filename | `collected_output.txt` |
+| `-c, --chars` | Max chars per part | `90000` |
+| `--no-tree` | Exclude tree from output | off |
+| `-i, --ignore` | Extra dirs to ignore | `[]` |
+| `-V, --version` | Print version | — |
+
+---
+
+## 🎮 TUI Screens
+
+### Browse & Select
+
+Select individual files with checkboxes:
+
+| Key | Action |
+|-----|--------|
+| SPACE | Toggle file checkbox |
+| / | Filter by substring |
+| a | Select all visible |
+| n | Deselect all visible |
+| p | Select by glob pattern |
+| c | Clear filter |
+| ENTER | Done → back to menu |
+
+### Collect Flow
+
+Before generating output, a **review screen** lets you dynamically
+uncheck files:
+
+```
+  [v] Collect — 5 files
+  Uncheck items to exclude before collecting
+------------------------------------------------------------
+ [x]  src/main.py
+ [x]  src/config/settings.py
+ [ ]  src/tests/test_main.py        <-- excluded
+ [x]  README.md
+ [x]  pyproject.toml
+
+  SPACE:toggle  ENTER:collect  ESC:cancel
+```
+
+### Settings
+
+Persistent configuration with three ignore list editors:
+
+- **Settings → Ignoring → Directories** — folder names to skip
+- **Settings → Ignoring → Files** — exact filenames to skip
+- **Settings → Ignoring → Extensions** — suffixes to skip
+- **Reset to defaults** — restore built-in rules
+
+Config saved at:
+
+| OS | Path |
+|----|------|
+| Linux/macOS | `~/.config/sfc/cfg.setting.json` |
+| Windows | `%APPDATA%\sfc\cfg.setting.json` |
+
+---
+
+## 📄 Output Format
+
+```
+══════════════
+📋 my-project [pick]
+📅 18.03.2026 14:39:48
+📄 Files: 3
+══════════════
+
+┌────────────
+│ 🗂️  STRUCTURE
+├────────────
+│ 📦 my-project/
+│ ├── 📂 src/
+│ │   ├── 📄 main.py
+│ │   └── 📄 utils.py
+│ └── 📄 README.md
+└────────────
+
+┌─── 📄 [1/3] src/main.py
+def main():
+    print("Hello AI!")
+└────────────────────────────────────────
+
+┌─── 📄 [2/3] src/utils.py
+def helper():
+    return 42
+└────────────────────────────────────────
+
+┌─── 📄 [3/3] README.md
+# My Project
+└────────────────────────────────────────
+
+═════
+✅ End
+═════
+```
+
+**Auto-split:** When output exceeds the character limit (default 90K),
+files are automatically split into `_p1.txt`, `_p2.txt`, etc.
+
+---
+
+## 🔖 Presets
+
+Save file selections for repeated use:
+
+```bash
+# Save
+sfc preset save api "src/routes/*" "src/middleware/*"
+
+# Use
+sfc preset api
+
+# List
+sfc preset list
+
+# Delete
+sfc preset delete api
+```
+
+Stored per-project in `.sfc-presets.json`.
+
+---
+
+## 🔄 Self-Updater
+
+In TUI: **Main Menu → Check for updates**
+
+- Checks `raw.githubusercontent.com` for newer version
+- Downloads and overwrites module files atomically
+- Prompts to restart
+- No sudo required (unless installed in system dirs)
+
+---
+
+## 💡 Tips for AI Workflows
+
+1. **Don't send everything.** Fixing a DB bug?
+   ```bash
+   sfc pick "src/db/*" "src/models/*"
+   ```
+
+2. **Use character limits.** Large project?
+   ```bash
+   sfc all -c 50000
+   ```
+   Feed parts sequentially: *"Here's part 1/3..."*
+
+3. **Quick Pick from AI output.** AI says "check these files"?
+   Copy the list → TUI → Quick Pick → paste → collect.
+
+4. **Combine with git:**
+   ```bash
+   git diff --name-only > changed.txt
+   sfc from changed.txt
+   ```
+
+5. **Save frequent selections:**
+   ```bash
+   sfc preset save backend "src/models/*" "src/services/*"
+   ```
+
+---
+
+## 🏗️ Architecture
+
+```
+sfc/
+├── __init__.py          # Package marker
+├── __main__.py          # Entry point
+├── version.py           # Version constant
+├── patterns.py          # Default ignores, glob helpers
+├── config.py            # Persistent JSON config
+├── collector.py         # File scanner, tree, output
+├── clipboard.py         # Native clipboard integration
+├── updater.py           # Self-update from GitHub
+├── app.py               # CLI + TUI controller
+└── tui/
+    ├── __init__.py      # Platform detection
+    ├── base.py          # Key enum, abstract engine
+    ├── curses_tui.py    # Linux/macOS engine
+    └── win_tui.py       # Windows engine
+```
+
+**Zero** external dependencies. **Zero** circular imports.
+
+---
+
+## 📋 Requirements
+
+- Python 3.10+
+- Terminal with at least 80×24 (for TUI)
+- **Linux clipboard:** `xclip`, `xsel`, or `wl-copy`
+- **macOS clipboard:** built-in (`pbcopy`)
+- **Windows clipboard:** built-in (`clip.exe`)
+
+---
+
+## 🔨 Building
+
+```bash
+# Build portable .pyz archive
+python build.py
+
+# Output: dist/sfc.pyz
+# Run:    ./dist/sfc.pyz  or  python dist/sfc.pyz
+
+# Clean build artifacts
+python build.py clean
+```
+
+---
+
+## 📜 License
+
+[MIT](LICENSE) — © 2026 [Heysh1n](https://github.com/Heysh1n)
+└────────────────────────────────────────
+
+┌─── 📄 [4/19] build.py
+#!/usr/bin/env python3
+"""Build sfc.pyz with correct package structure."""
+
+from __future__ import annotations
+
+import shutil
+import zipapp
+from pathlib import Path
+
+DIST = Path("dist")
+STAGING = Path("_build_staging")
+PKG = Path("sfc")
+APP_NAME = "sfc"
+
+
+def clean() -> None:
+    for d in (DIST, STAGING):
+        if d.is_dir():
+            shutil.rmtree(d)
+    print("🧹 Cleaned")
+
+
+def build() -> Path:
+    clean()
+    DIST.mkdir(parents=True, exist_ok=True)
+    STAGING.mkdir(parents=True, exist_ok=True)
+
+    # Copy package into staging as a subdirectory (preserves relative imports)
+    shutil.copytree(PKG, STAGING / "sfc", dirs_exist_ok=True)
+
+    # Remove __pycache__
+    for cache in (STAGING / "sfc").rglob("__pycache__"):
+        shutil.rmtree(cache)
+
+    # Top-level __main__.py that uses absolute imports
+    (STAGING / "__main__.py").write_text(
+        "import sys\n"
+        "from sfc.app import run\n"
+        "run(sys.argv[1:])\n",
+        encoding="utf-8",
+    )
+
+    out = DIST / f"{APP_NAME}.pyz"
+    zipapp.create_archive(
+        source=STAGING,
+        target=out,
+        interpreter="/usr/bin/env python3",
+        compressed=True,
+    )
+
+    shutil.rmtree(STAGING)
+
+    size_kb = out.stat().st_size / 1024
+    print(f"✅ Built: {out}  ({size_kb:.1f} KB)")
+    print(f"   Run:   ./{out}  or  python {out}")
+    return out
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "clean":
+        clean()
+    else:
+        build()
+└────────────────────────────────────────
+
+┌─── 📄 [5/19] pyproject.toml
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sfc"
+version = "3.0.0"
+description = "Smart File Collector — collect project files for AI context"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["file-collector", "cli", "tui", "ai", "context", "llm"]
+dependencies = []
+
+[project.scripts]
+sfc = "sfc.app:run"
+
+[tool.setuptools.packages.find]
+include = ["sfc*"]
+└────────────────────────────────────────
+
+┌─── 📄 [6/19] requirements-build.txt
+pyinstaller>=6.0
+└────────────────────────────────────────
+
+┌─── 📄 [7/19] sfc/__init__.py
+"""Smart File Collector — collect project files for AI context."""
+
+from .version import VERSION
+
+__version__: str = VERSION
+└────────────────────────────────────────
+
+┌─── 📄 [8/19] sfc/__main__.py
+"""Entry point for ``python -m sfc`` and zipapp execution."""
+
+from __future__ import annotations
+
+import sys
+import os
+
+
+def main() -> None:
+    # Zipapp flattens into zip root — relative imports break.
+    # Detect and fix by inserting the zip/dir into sys.path so the
+    # 'sfc' package inside the staging layout is importable.
+    try:
+        from .app import run
+    except ImportError:
+        # We are NOT inside a package (zipapp direct execution).
+        # The zipapp was built with staging/ containing sfc/ as subdir.
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from sfc.app import run  # type: ignore[no-redef]
+
+    try:
+        run(sys.argv[1:])
+    except Exception as exc:
+        print(f"\n❌ Fatal error: {exc}", file=sys.stderr)
+        if "--debug" in sys.argv:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+└────────────────────────────────────────
+
+┌─── 📄 [9/19] sfc/app.py
+"""Top-level application controller — wires TUI, config, collector, etc.
+
+Handles:
+- CLI argument parsing and dispatch (non-interactive commands)
+- Interactive TUI routing (main menu → sub-screens)
+- Settings / Ignoring management
+- Preset management
+- Update flow
+- Final collect with dynamic unchecking
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import sys
+from pathlib import Path
+from typing import Sequence
+
+from .version import VERSION, APP_TITLE
+from .config import AppConfig, load_config, save_config, load_presets, save_presets
+from .collector import (
+    get_all_files,
+    build_tree,
+    assemble_context,
+    write_output,
+    read_safe,
+    fmt_size,
+    term_width,
+)
+from .clipboard import copy_to_clipboard, available_backend, ClipboardResult
+from .patterns import (
+    resolve_patterns,
+    matches_pattern,
+    HELP_GLOB,
+    HELP_PRESETS,
+    HELP_FILTERS,
+    DEFAULT_IGNORE_DIRS,
+    DEFAULT_IGNORE_FILES,
+    DEFAULT_IGNORE_EXTENSIONS,
+)
+from .updater import check_update, apply_update
+
+
+# ════════════════════════════════════════════════════════════════════
+#  CLI (NON-INTERACTIVE) COMMANDS
+# ════════════════════════════════════════════════════════════════════
+
+def _cli_all(args: argparse.Namespace, cfg: AppConfig) -> None:
+    root = Path(args.path).resolve()
+    if not root.is_dir():
+        print(f"❌ Not a directory: {root}")
+        return
+    extra = set(args.ignore) if args.ignore else None
+    files = get_all_files(root, cfg, extra)
+    print(f"📄 {len(files)} files")
+    created = write_output(root, files, args.output, "all", not args.no_tree, args.chars)
+    _cli_print_created(created)
+
+
+def _cli_pick(args: argparse.Namespace, cfg: AppConfig) -> None:
+    root = Path(args.path).resolve()
+    if not root.is_dir():
+        print(f"❌ Not a directory: {root}")
+        return
+    patterns: list[str] = getattr(args, "files", None) or []
+    if not patterns or patterns == ["-"]:
+        print("📝 Paths (one per line, empty = done):")
+        patterns = []
+        while True:
+            try:
+                line = input("  > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if not line:
+                break
+            patterns.append(line)
+    if not patterns:
+        print("❌ No files specified")
+        return
+    all_f = get_all_files(root, cfg)
+    picked, unmatched = resolve_patterns(root, patterns, all_f)
+    for u in unmatched:
+        print(f"  ⚠️  Not found: {u}")
+    if not picked:
+        print("❌ No matches")
+        return
+    print(f"📄 {len(picked)} files")
+    created = write_output(root, picked, args.output, "pick", not args.no_tree, args.chars)
+    _cli_print_created(created)
+
+
+def _cli_tree(args: argparse.Namespace, cfg: AppConfig) -> None:
+    root = Path(args.path).resolve()
+    if not root.is_dir():
+        print(f"❌ Not a directory: {root}")
+        return
+    extra = set(args.ignore) if args.ignore else None
+    files = get_all_files(root, cfg, extra)
+    print(f"\n{build_tree(root, files, sizes=getattr(args, 'sizes', False))}")
+    print(f"\n📄 Total: {len(files)}")
+
+
+def _cli_find(args: argparse.Namespace, cfg: AppConfig) -> None:
+    root = Path(args.path).resolve()
+    if not root.is_dir():
+        print(f"❌ Not a directory: {root}")
+        return
+    pat: str = args.pattern
+    all_f = get_all_files(root, cfg)
+    matched = [
+        f for f in all_f
+        if matches_pattern(
+            str(f.relative_to(root)).replace("\\", "/"), f.name, pat,
+        )
+    ]
+    if not matched:
+        print(f"❌ Nothing matching: {pat}")
+        return
+    print(f"\n🔍 {len(matched)} files:\n")
+    parts: list[str] = []
+    for f in matched:
+        rel = str(f.relative_to(root)).replace("\\", "/")
+        print(f"  {rel}  ({fmt_size(f.stat().st_size)})")
+        parts.append(f'"{rel}"')
+    print(f'\n💡 sfc pick {" ".join(parts)}')
+
+
+def _cli_from(args: argparse.Namespace, cfg: AppConfig) -> None:
+    lf = Path(args.list_file)
+    if not lf.exists():
+        print(f"❌ Not found: {lf}")
+        return
+    patterns = [
+        l.strip() for l in lf.read_text("utf-8").splitlines()
+        if l.strip() and not l.strip().startswith("#")
+    ]
+    if not patterns:
+        print("❌ Empty list")
+        return
+    args.files = patterns
+    _cli_pick(args, cfg)
+
+
+def _cli_preset(args: argparse.Namespace, cfg: AppConfig) -> None:
+    root = Path(args.path).resolve()
+    presets = load_presets(root)
+    pa: list[str] = getattr(args, "preset_args", []) or []
+    if not pa:
+        print("Usage: preset list | save <name> files... | delete <name> | <name>")
+        return
+    action = pa[0]
+    if action == "list":
+        if not presets:
+            print("📋 No presets")
+            return
+        for name, pats in sorted(presets.items()):
+            print(f"  🔖 {name}: {', '.join(pats)}")
+    elif action == "save":
+        if len(pa) < 3:
+            print("Usage: preset save <name> file1 file2 ...")
+            return
+        presets[pa[1]] = pa[2:]
+        save_presets(presets, root)
+        print(f"✅ Saved '{pa[1]}'")
+    elif action == "delete":
+        if len(pa) < 2:
+            print("Usage: preset delete <name>")
+            return
+        if pa[1] in presets:
+            del presets[pa[1]]
+            save_presets(presets, root)
+            print("✅ Deleted")
+        else:
+            print("❌ Not found")
+    else:
+        name = action
+        if name not in presets:
+            print(f"❌ Preset '{name}' not found")
+            return
+        args.files = presets[name]
+        _cli_pick(args, cfg)
+
+
+def _cli_print_created(created: list[tuple[Path, int]]) -> None:
+    if not created:
+        print("⚠️  No output")
+        return
+    print(f"\n  ✅ {len(created)} file(s):")
+    for fn, ch in created:
+        print(f"     📄 {fn.name}: {ch:,} chars")
+
+
+# ════════════════════════════════════════════════════════════════════
+#  CLI PARSER
+# ════════════════════════════════════════════════════════════════════
+
+def _build_parser(cfg: AppConfig) -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("-p", "--path", default=".")
+    common.add_argument("-o", "--output", default=cfg.output)
+    common.add_argument("-c", "--chars", type=int, default=cfg.max_chars)
+    common.add_argument("--no-tree", action="store_true")
+    common.add_argument("-i", "--ignore", nargs="*", default=[])
+
+    parser = argparse.ArgumentParser(
+        prog="sfc",
+        description=f"🔧 {APP_TITLE} v{VERSION}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-V", "--version", action="version", version=f"sfc {VERSION}")
+    sub = parser.add_subparsers(dest="cmd")
+    sub.add_parser("all", parents=[common])
+    sp = sub.add_parser("pick", parents=[common])
+    sp.add_argument("files", nargs="*")
+    st = sub.add_parser("tree", parents=[common])
+    st.add_argument("-s", "--sizes", action="store_true")
+    sf = sub.add_parser("find", parents=[common])
+    sf.add_argument("pattern")
+    sfr = sub.add_parser("from", parents=[common])
+    sfr.add_argument("list_file")
+    spr = sub.add_parser("preset", parents=[common])
+    spr.add_argument("preset_args", nargs="*")
+    return parser
+
+
+# ════════════════════════════════════════════════════════════════════
+#  INTERACTIVE TUI APPLICATION
+# ════════════════════════════════════════════════════════════════════
+
+class App:
+    """Interactive TUI application state and screen routing."""
+
+    def __init__(
+        self,
+        root: Path,
+        cfg: AppConfig,
+        extra_ignore: set[str] | None = None,
+    ) -> None:
+        self.root: Path = root.resolve()
+        self.cfg: AppConfig = cfg
+        self.extra_ignore: set[str] | None = extra_ignore
+        self.selected: set[str] = set()
+        self.all_files: list[Path] = []
+        self.rel_paths: list[str] = []
+        self._refresh_files()
+
+        # Lazy-init engine
+        from .tui import get_engine
+        self.engine = get_engine()
+
+    def _refresh_files(self) -> None:
+        self.all_files = get_all_files(self.root, self.cfg, self.extra_ignore)
+        self.rel_paths = [
+            str(f.relative_to(self.root)).replace("\\", "/")
+            for f in self.all_files
+        ]
+        self.selected = {s for s in self.selected if s in set(self.rel_paths)}
+
+    def run(self) -> None:
+        self.engine.start()
+        try:
+            self._main_menu()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.engine.stop()
+
+    # ── Main Menu ──────────────────────────────────────────────────
+
+    def _main_menu(self) -> None:
+        from .tui.base import MenuItem, Key
+
+        while True:
+            sel_count = len(self.selected)
+            title = [
+                f"  ━━━ 🔧 {APP_TITLE} v{VERSION} ━━━",
+                f"  📂 {self.root.name}  │  📄 {len(self.all_files)} files"
+                + (f"  │  ✓ {sel_count} selected" if sel_count else ""),
+            ]
+
+            items = [
+                MenuItem("📂  Browse & Select", "browse"),
+                MenuItem("🔍  Search by pattern", "search"),
+                MenuItem("📝  Quick pick (paste paths)", "quick_pick"),
+                MenuItem("📋  Collect ALL files", "collect_all"),
+                MenuItem("🔖  Presets", "presets"),
+                MenuItem("🗂️   View tree", "tree"),
+                MenuItem("⚙️   Settings", "settings"),
+                MenuItem("📖  Help", "help"),
+                MenuItem("🔄  Check for updates", "update"),
+                MenuItem("─" * 30, "_sep", enabled=False),
+                MenuItem(f"✅  Collect selected ({sel_count})", "collect", enabled=sel_count > 0),
+                MenuItem("👁️   Preview selected", "preview", enabled=sel_count > 0),
+                MenuItem("🗑️   Clear selection", "clear_sel", enabled=sel_count > 0),
+                MenuItem("─" * 30, "_sep2", enabled=False),
+                MenuItem("❌  Exit", "exit"),
+            ]
+
+            footer = ["  ↑↓:navigate  ENTER:select  q:quit"]
+
+            def on_select(item: MenuItem, idx: int) -> bool:
+                return True
+
+            def on_key(ev: KeyEvent, items: list[MenuItem], cur: int) -> int | None:
+                if ev.key is Key.CHAR and ev.char in ("q", "Q"):
+                    raise _ExitApp
+                return None
+
+            try:
+                chosen = self.engine.menu_loop(title, items, footer, on_select, on_key=on_key)
+            except _ExitApp:
+                return
+
+            if chosen is None:
+                return
+
+            action = chosen.value
+            if action == "exit":
+                return
+            elif action == "browse":
+                self._browse()
+            elif action == "search":
+                self._search()
+            elif action == "quick_pick":
+                self._quick_pick()
+            elif action == "collect_all":
+                self._collect_all()
+            elif action == "presets":
+                self._presets_menu()
+            elif action == "tree":
+                self._tree_view()
+            elif action == "settings":
+                self._settings_menu()
+            elif action == "help":
+                self._help_menu()
+            elif action == "update":
+                self._update_screen()
+            elif action == "collect":
+                self._do_collect()
+            elif action == "preview":
+                self._preview()
+            elif action == "clear_sel":
+                self.selected.clear()
+                self.engine.show_message("✓ Selection cleared")
+
+    # ── Browse & Select ────────────────────────────────────────────
+
+    def _browse(self) -> None:
+        from .tui.base import MenuItem, Key, KeyEvent
+
+        filter_text: str = ""
+
+        while True:
+            # Build filtered index list
+            if filter_text:
+                ft = filter_text.lower()
+                indices = [i for i, r in enumerate(self.rel_paths) if ft in r.lower()]
+            else:
+                indices = list(range(len(self.rel_paths)))
+
+            if not indices:
+                self.engine.show_message(f"No files match: '{filter_text}'")
+                filter_text = ""
+                continue
+
+            items: list[MenuItem] = []
+            for gi in indices:
+                rel = self.rel_paths[gi]
+                fp = self.all_files[gi]
+                try:
+                    sz = fmt_size(fp.stat().st_size)
+                except OSError:
+                    sz = "?"
+                items.append(
+                    MenuItem(
+                        label=rel,
+                        value=rel,
+                        checked=rel in self.selected,
+                        suffix=sz,
+                    )
+                )
+
+            finfo = f"  filter: '{filter_text}'" if filter_text else ""
+            title = [
+                f"  📂 Browse  ({len(indices)} files){finfo}",
+                f"  ✓ {len(self.selected)} selected" if self.selected else "",
+            ]
+            footer_lines = [
+                "  SPACE:toggle  ENTER:done  /:filter  a:all  n:none  p:glob  ESC:back",
+            ]
+
+            done: bool = False
+
+            def on_check(item: MenuItem, idx: int) -> None:
+                if item.checked:
+                    self.selected.add(item.value)
+                else:
+                    self.selected.discard(item.value)
+
+            def on_select(item: MenuItem, idx: int) -> bool:
+                nonlocal done
+                done = True
+                return True
+
+            def on_key(ev: KeyEvent, menu_items: list[MenuItem], cur: int) -> int | None:
+                nonlocal filter_text, done
+
+                if ev.key is Key.CHAR:
+                    ch = ev.char.lower()
+                    if ch == "/":
+                        result = self.engine.prompt("Filter: ")
+                        if result is not None:
+                            filter_text = result
+                        done = True  # re-enter loop to rebuild
+                        return -999  # signal to exit menu_loop
+                    elif ch == "a":
+                        for item in menu_items:
+                            item.checked = True
+                            self.selected.add(item.value)
+                        return cur
+                    elif ch == "n":
+                        for item in menu_items:
+                            item.checked = False
+                            self.selected.discard(item.value)
+                        return cur
+                    elif ch == "p":
+                        pat = self.engine.prompt("Glob pattern: ")
+                        if pat:
+                            count = 0
+                            for item in menu_items:
+                                if matches_pattern(item.value, Path(item.value).name, pat):
+                                    item.checked = True
+                                    self.selected.add(item.value)
+                                    count += 1
+                            self.engine.show_message(f"+{count} selected by '{pat}'")
+                        return cur
+                    elif ch == "c":
+                        filter_text = ""
+                        done = True
+                        return -999
+                return None
+
+            result = self.engine.menu_loop(
+                title, items, footer_lines, on_select, on_check, on_key,
+            )
+
+            # Sync checkbox state back
+            for item in items:
+                if item.checked:
+                    self.selected.add(item.value)
+                else:
+                    self.selected.discard(item.value)
+
+            if result is None and not done:
+                # ESC — exit browse
+                return
+            if done and not filter_text and result is not None:
+                # ENTER pressed → exit browse
+                return
+            # Otherwise loop (filter changed)
+
+    # ── Search ─────────────────────────────────────────────────────
+
+    def _search(self) -> None:
+        from .tui.base import MenuItem
+
+        pat = self.engine.prompt("Search glob: ")
+        if not pat:
+            return
+
+        matched_indices = [
+            i for i, rel in enumerate(self.rel_paths)
+            if matches_pattern(rel, Path(rel).name, pat)
+        ]
+
+        if not matched_indices:
+            self.engine.show_message(f"❌ Nothing matches: {pat}")
+            return
+
+        items = [
+            MenuItem(
+                label=self.rel_paths[i],
+                value=self.rel_paths[i],
+                checked=self.rel_paths[i] in self.selected,
+            )
+            for i in matched_indices
+        ]
+
+        title = [f"  🔍 Results for '{pat}' — {len(items)} files"]
+        footer = ["  SPACE:toggle  a:all  n:none  ENTER/ESC:back"]
+
+        def on_check(item: MenuItem, idx: int) -> None:
+            if item.checked:
+                self.selected.add(item.value)
+            else:
+                self.selected.discard(item.value)
+
+        def on_key(ev: KeyEvent, menu_items: list[MenuItem], cur: int) -> int | None:
+            from .tui.base import Key, KeyEvent as KE
+            if ev.key is Key.CHAR:
+                if ev.char.lower() == "a":
+                    for it in menu_items:
+                        it.checked = True
+                        self.selected.add(it.value)
+                    return cur
+                if ev.char.lower() == "n":
+                    for it in menu_items:
+                        it.checked = False
+                        self.selected.discard(it.value)
+                    return cur
+            return None
+
+        self.engine.menu_loop(title, items, footer, on_check=on_check, on_key=on_key)
+
+        # Sync
+        for item in items:
+            if item.checked:
+                self.selected.add(item.value)
+            else:
+                self.selected.discard(item.value)
+
+    # ── Quick Pick ─────────────────────────────────────────────────
+
+    def _quick_pick(self) -> None:
+        self.engine.show_message(
+            "📝 Quick Pick\n\n"
+            "Enter paths/patterns one per line.\n"
+            "Press ENTER on empty line to finish.",
+            wait=False,
+        )
+        patterns: list[str] = []
+        while True:
+            line = self.engine.prompt("path> ")
+            if line is None or line == "":
+                break
+            patterns.append(line)
+
+        if not patterns:
+            return
+
+        picked, unmatched = resolve_patterns(self.root, patterns, self.all_files)
+        for rel in [str(f.relative_to(self.root)).replace("\\", "/") for f in picked]:
+            self.selected.add(rel)
+
+        msg = f"✓ {len(picked)} files added"
+        if unmatched:
+            msg += f"\n⚠️ Not found: {', '.join(unmatched)}"
+        self.engine.show_message(msg)
+
+    # ── Collect All ────────────────────────────────────────────────
+
+    def _collect_all(self) -> None:
+        if not self.all_files:
+            self.engine.show_message("⚠️ No files found")
+            return
+        created = write_output(
+            self.root, self.all_files, self.cfg.output,
+            "all", self.cfg.show_tree, self.cfg.max_chars,
+        )
+        self._offer_clipboard(created)
+
+    # ── Collect Selected (with dynamic uncheck) ────────────────────
+
+    def _do_collect(self) -> None:
+        from .tui.base import MenuItem
+
+        if not self.selected:
+            self.engine.show_message("⚠️ Nothing selected")
+            return
+
+        sorted_sel = sorted(self.selected)
+        items = [
+            MenuItem(label=rel, value=rel, checked=True)
+            for rel in sorted_sel
+        ]
+
+        title = [
+            f"  ✅ Collect — {len(items)} files",
+            "  Uncheck items to exclude before collecting",
+        ]
+        footer = ["  SPACE:toggle  ENTER:collect  ESC:cancel"]
+
+        result = self.engine.menu_loop(
+            title, items, footer,
+            on_select=lambda item, idx: True,
+        )
+
+        if result is None:
+            return
+
+        # Gather only checked items
+        final_rels = [item.value for item in items if item.checked]
+        if not final_rels:
+            self.engine.show_message("⚠️ All items unchecked — nothing to collect")
+            return
+
+        files = [self.root / r for r in final_rels if (self.root / r).exists()]
+        if not files:
+            self.engine.show_message("❌ No valid files")
+            return
+
+        created = write_output(
+            self.root, files, self.cfg.output,
+            "pick", self.cfg.show_tree, self.cfg.max_chars,
+        )
+        self._offer_clipboard(created)
+
+    # ── Preview ────────────────────────────────────────────────────
+
+    def _preview(self) -> None:
+        if not self.selected:
+            self.engine.show_message("⚠️ Nothing selected")
+            return
+
+        lines: list[str] = [f"  👁️ Selected ({len(self.selected)})", ""]
+        total_sz = 0
+        for rel in sorted(self.selected):
+            fp = self.root / rel
+            if fp.exists():
+                sz = fp.stat().st_size
+                total_sz += sz
+                lines.append(f"  ✓ {rel}  ({fmt_size(sz)})")
+            else:
+                lines.append(f"  ✗ {rel} (missing)")
+
+        est = sum(
+            len(read_safe(self.root / r)) + 100
+            for r in self.selected if (self.root / r).exists()
+        )
+        parts_est = max(1, (est + self.cfg.max_chars - 1) // self.cfg.max_chars)
+        lines.append("")
+        lines.append(f"  Total: {fmt_size(total_sz)} | ~{est:,} chars | ~{parts_est} part(s)")
+
+        self.engine.draw_text_block("\n".join(lines))
+
+    # ── Tree ───────────────────────────────────────────────────────
+
+    def _tree_view(self) -> None:
+        tree_text = build_tree(self.root, self.all_files, sizes=True)
+        tree_text += f"\n\n 📄 Total: {len(self.all_files)} files"
+        self.engine.draw_text_block(tree_text)
+
+    # ── Settings ───────────────────────────────────────────────────
+
+    def _settings_menu(self) -> None:
+        from .tui.base import MenuItem
+
+        while True:
+            tree_s = "ON" if self.cfg.show_tree else "OFF"
+            copy_s = "ON" if self.cfg.auto_copy else "OFF"
+            clip_backend = available_backend() or "none"
+
+            items = [
+                MenuItem(f"Output file:      {self.cfg.output}", "output"),
+                MenuItem(f"Max chars/part:   {self.cfg.max_chars:,}", "max_chars"),
+                MenuItem(f"Include tree:     {tree_s}", "toggle_tree"),
+                MenuItem(f"Auto clipboard:   {copy_s}", "toggle_copy"),
+                MenuItem(f"Page size:        {self.cfg.page_size}", "page_size"),
+                MenuItem(f"Clipboard:        {clip_backend}", "_clip", enabled=False),
+                MenuItem("─" * 30, "_sep", enabled=False),
+                MenuItem("🚫  Ignoring (dirs/files/ext)", "ignoring"),
+                MenuItem(f"🔄  Refresh files  ({len(self.all_files)} indexed)", "refresh"),
+                MenuItem("─" * 30, "_sep2", enabled=False),
+                MenuItem("↩   Back", "back"),
+            ]
+
+            title = ["  ⚙️ Settings"]
+            result = self.engine.menu_loop(
+                title, items, on_select=lambda item, idx: True,
+            )
+
+            if result is None or result.value == "back":
+                save_config(self.cfg)
+                return
+
+            v = result.value
+            if v == "output":
+                val = self.engine.prompt("Output file: ", self.cfg.output)
+                if val:
+                    self.cfg.output = val
+            elif v == "max_chars":
+                val = self.engine.prompt("Max chars: ", str(self.cfg.max_chars))
+                if val:
+                    try:
+                        self.cfg.max_chars = max(1000, int(val))
+                    except ValueError:
+                        pass
+            elif v == "toggle_tree":
+                self.cfg.show_tree = not self.cfg.show_tree
+            elif v == "toggle_copy":
+                self.cfg.auto_copy = not self.cfg.auto_copy
+            elif v == "page_size":
+                val = self.engine.prompt("Page size: ", str(self.cfg.page_size))
+                if val:
+                    try:
+                        self.cfg.page_size = max(5, min(100, int(val)))
+                    except ValueError:
+                        pass
+            elif v == "ignoring":
+                self._ignoring_menu()
+            elif v == "refresh":
+                self._refresh_files()
+                self.engine.show_message(f"✓ {len(self.all_files)} files indexed")
+
+    # ── Ignoring Sub-Menu ──────────────────────────────────────────
+
+    def _ignoring_menu(self) -> None:
+        from .tui.base import MenuItem
+
+        while True:
+            items = [
+                MenuItem(
+                    f"Ignored directories  ({len(self.cfg.ignore_dirs)})", "dirs",
+                ),
+                MenuItem(
+                    f"Ignored files        ({len(self.cfg.ignore_files)})", "files",
+                ),
+                MenuItem(
+                    f"Ignored extensions   ({len(self.cfg.ignore_extensions)})", "exts",
+                ),
+                MenuItem("─" * 30, "_sep", enabled=False),
+                MenuItem("🔄  Reset ALL to defaults", "reset"),
+                MenuItem("📖  Filter help", "help"),
+                MenuItem("↩   Back", "back"),
+            ]
+
+            title = ["  🚫 Ignoring Settings"]
+            result = self.engine.menu_loop(
+                title, items, on_select=lambda i, idx: True,
+            )
+
+            if result is None or result.value == "back":
+                save_config(self.cfg)
+                self._refresh_files()
+                return
+
+            v = result.value
+            if v == "dirs":
+                self._edit_ignore_list("Ignored Directories", self.cfg.ignore_dirs)
+            elif v == "files":
+                self._edit_ignore_list("Ignored Files", self.cfg.ignore_files)
+            elif v == "exts":
+                self._edit_ignore_list("Ignored Extensions", self.cfg.ignore_extensions)
+            elif v == "reset":
+                if self.engine.confirm("Reset all ignore lists to defaults?"):
+                    self.cfg.reset_ignores()
+                    save_config(self.cfg)
+                    self._refresh_files()
+                    self.engine.show_message("✓ Reset to defaults")
+            elif v == "help":
+                self.engine.draw_text_block(HELP_FILTERS)
+
+    def _edit_ignore_list(self, title: str, lst: list[str]) -> None:
+        from .tui.base import MenuItem, Key, KeyEvent
+
+        while True:
+            items = [
+                MenuItem(entry, entry, checked=True) for entry in sorted(lst)
+            ]
+            items.append(MenuItem("─" * 30, "_sep", enabled=False))
+            items.append(MenuItem("➕  Add new entry", "add"))
+            items.append(MenuItem("↩   Back", "back"))
+
+            header = [f"  {title} ({len(lst)} entries)", "  Uncheck to remove"]
+            footer = ["  SPACE:remove  ENTER:action  a:add  ESC:back"]
+
+            removed: set[str] = set()
+
+            def on_check(item: MenuItem, idx: int) -> None:
+                if not item.checked:
+                    removed.add(item.value)
+                else:
+                    removed.discard(item.value)
+
+            def on_key(ev: KeyEvent, menu_items: list[MenuItem], cur: int) -> int | None:
+                if ev.key is Key.CHAR and ev.char.lower() == "a":
+                    val = self.engine.prompt("Add: ")
+                    if val and val.strip():
+                        entry = val.strip()
+                        if entry not in lst:
+                            lst.append(entry)
+                    return -999  # rebuild
+                return None
+
+            result = self.engine.menu_loop(
+                header, items, footer,
+                on_select=lambda item, idx: True,
+                on_check=on_check,
+                on_key=on_key,
+            )
+
+            # Apply removals
+            if removed:
+                for entry in removed:
+                    if entry in lst:
+                        lst.remove(entry)
+
+            if result is None or (result is not None and result.value == "back"):
+                return
+
+            if result is not None and result.value == "add":
+                val = self.engine.prompt("Add: ")
+                if val and val.strip():
+                    entry = val.strip()
+                    if entry not in lst:
+                        lst.append(entry)
+                # loop to rebuild
+
+    # ── Presets ────────────────────────────────────────────────────
+
+    def _presets_menu(self) -> None:
+        from .tui.base import MenuItem
+
+        while True:
+            presets = load_presets(self.root)
+            names = sorted(presets.keys())
+
+            items: list[MenuItem] = []
+            for name in names:
+                pats = presets[name]
+                items.append(MenuItem(
+                    f"🔖 {name}  ({len(pats)} patterns)", f"use:{name}",
+                ))
+
+            if not items:
+                items.append(MenuItem("  (no presets yet)", "_empty", enabled=False))
+
+            items.append(MenuItem("─" * 30, "_sep", enabled=False))
+            items.append(MenuItem("💾  Save selection as preset", "save"))
+            items.append(MenuItem("🗑️   Delete a preset", "delete"))
+            items.append(MenuItem("📤  Export preset → collect", "export"))
+            items.append(MenuItem("↩   Back", "back"))
+
+            title = ["  🔖 Presets"]
+            result = self.engine.menu_loop(
+                title, items, on_select=lambda item, idx: True,
+            )
+
+            if result is None or result.value == "back":
+                return
+
+            v = result.value
+            if v.startswith("use:"):
+                name = v[4:]
+                picked, _ = resolve_patterns(self.root, presets[name], self.all_files)
+                for fp in picked:
+                    self.selected.add(str(fp.relative_to(self.root)).replace("\\", "/"))
+                self.engine.show_message(f"✓ +{len(picked)} files from '{name}'")
+
+            elif v == "save":
+                if not self.selected:
+                    self.engine.show_message("⚠️ Nothing selected")
+                    continue
+                name = self.engine.prompt("Preset name: ")
+                if name:
+                    presets[name] = sorted(self.selected)
+                    save_presets(presets, self.root)
+                    self.engine.show_message(f"✓ Saved '{name}' ({len(self.selected)} files)")
+
+            elif v == "delete":
+                if not names:
+                    self.engine.show_message("No presets to delete")
+                    continue
+                del_items = [MenuItem(n, n) for n in names]
+                del_result = self.engine.menu_loop(
+                    ["  Delete preset"], del_items,
+                    on_select=lambda item, idx: True,
+                )
+                if del_result and del_result.value in presets:
+                    if self.engine.confirm(f"Delete '{del_result.value}'?"):
+                        del presets[del_result.value]
+                        save_presets(presets, self.root)
+                        self.engine.show_message("✓ Deleted")
+
+            elif v == "export":
+                if not names:
+                    self.engine.show_message("No presets to export")
+                    continue
+                exp_items = [MenuItem(n, n) for n in names]
+                exp_result = self.engine.menu_loop(
+                    ["  Export preset"], exp_items,
+                    on_select=lambda item, idx: True,
+                )
+                if exp_result and exp_result.value in presets:
+                    picked, _ = resolve_patterns(
+                        self.root, presets[exp_result.value], self.all_files,
+                    )
+                    if picked:
+                        created = write_output(
+                            self.root, picked, self.cfg.output,
+                            f"preset:{exp_result.value}",
+                            self.cfg.show_tree, self.cfg.max_chars,
+                        )
+                        self._offer_clipboard(created)
+
+    # ── Help ───────────────────────────────────────────────────────
+
+    def _help_menu(self) -> None:
+        from .tui.base import MenuItem
+
+        items = [
+            MenuItem("📖  Glob Patterns", "glob"),
+            MenuItem("📖  Presets Guide", "presets"),
+            MenuItem("📖  Filters & Ignoring", "filters"),
+            MenuItem("↩   Back", "back"),
+        ]
+        while True:
+            result = self.engine.menu_loop(
+                ["  📖 Help"], items, on_select=lambda i, idx: True,
+            )
+            if result is None or result.value == "back":
+                return
+            if result.value == "glob":
+                self.engine.draw_text_block(HELP_GLOB)
+            elif result.value == "presets":
+                self.engine.draw_text_block(HELP_PRESETS)
+            elif result.value == "filters":
+                self.engine.draw_text_block(HELP_FILTERS)
+
+    # ── Update ─────────────────────────────────────────────────────
+
+    def _update_screen(self) -> None:
+        self.engine.show_message("🔄 Checking for updates...", wait=False)
+        result = check_update()
+
+        if result.error:
+            self.engine.show_message(f"❌ {result.error}")
+            return
+
+        if not result.available:
+            self.engine.show_message(
+                f"✅ You are on the latest version ({result.current_version})"
+            )
+            return
+
+        if not self.engine.confirm(
+            f"Update available: {result.current_version} → {result.remote_version}. Install?"
+        ):
+            return
+
+        self.engine.show_message("⬇️  Downloading update...", wait=False)
+        apply_result = apply_update()
+
+        if apply_result.ok:
+            self.engine.show_message(f"✅ {apply_result.message}")
+        else:
+            self.engine.show_message(f"❌ {apply_result.message}")
+
+    # ── Clipboard ──────────────────────────────────────────────────
+
+    def _offer_clipboard(self, created: list[tuple[Path, int]]) -> None:
+        if not created:
+            self.engine.show_message("⚠️ No output files created")
+            return
+
+        msg_lines: list[str] = [f"✅ {len(created)} file(s) written:"]
+        for fn, ch in created:
+            msg_lines.append(f"  📄 {fn.name}: {ch:,} chars")
+
+        if self.cfg.auto_copy:
+            self._do_copy(created, msg_lines)
+            return
+
+        msg_lines.append("")
+        self.engine.show_message("\n".join(msg_lines), wait=False)
+
+        if self.engine.confirm("Copy to clipboard?"):
+            self._do_copy(created, [])
+        else:
+            self.engine.show_message("\n".join(msg_lines))
+
+    def _do_copy(
+        self,
+        created: list[tuple[Path, int]],
+        extra_msg: list[str],
+    ) -> None:
+        try:
+            text = "".join(Path(fn).read_text("utf-8") for fn, _ in created)
+            result: ClipboardResult = copy_to_clipboard(text)
+            if result.ok:
+                extra_msg.append(f"📋 Copied via {result.backend}")
+            else:
+                extra_msg.append(f"⚠️ Clipboard: {result.error}")
+        except Exception as exc:
+            extra_msg.append(f"⚠️ {exc}")
+
+        self.engine.show_message("\n".join(extra_msg) if extra_msg else "Done")
+
+
+class _ExitApp(Exception):
+    """Sentinel raised to exit the main menu loop."""
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ENTRY POINT
+# ════════════════════════════════════════════════════════════════════
+
+def run(argv: list[str] | None = None) -> None:
+    """Main entry point — dispatches to CLI or interactive TUI."""
+    if argv is None:
+        argv = sys.argv[1:]
+
+    cfg: AppConfig = load_config()
+
+    # No args → interactive
+    if not argv:
+        root = Path(".").resolve()
+        App(root, cfg).run()
+        return
+
+    parser = _build_parser(cfg)
+    args = parser.parse_args(argv)
+
+    if not args.cmd:
+        # No subcommand but flags given → interactive with overrides
+        root = Path(args.path).resolve()
+        extra = set(args.ignore) if args.ignore else None
+        cfg.output = args.output
+        cfg.max_chars = args.chars
+        App(root, cfg, extra).run()
+        return
+
+    handlers = {
+        "all": _cli_all,
+        "pick": _cli_pick,
+        "tree": _cli_tree,
+        "find": _cli_find,
+        "from": _cli_from,
+        "preset": _cli_preset,
+    }
+    handlers[args.cmd](args, cfg)
+└────────────────────────────────────────
+
+┌─── 📄 [10/19] sfc/clipboard.py
+"""Cross-platform clipboard copy using only OS-native tools.
+
+Supported backends (tried in order):
+  Windows  → clip.exe
+  macOS    → pbcopy
+  Linux    → wl-copy (Wayland), xclip (X11), xsel (X11 fallback)
+
+No third-party dependencies.  No sudo required.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from typing import NamedTuple
+
+
+class ClipboardResult(NamedTuple):
+    """Outcome of a clipboard copy attempt."""
+    ok: bool
+    backend: str  # tool name that succeeded, or "" on failure
+    error: str    # human-readable error, or "" on success
+
+
+def _is_wayland() -> bool:
+    """Detect active Wayland session."""
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _is_x11() -> bool:
+    """Detect active X11 session."""
+    return bool(os.environ.get("DISPLAY"))
+
+
+def _run(cmd: list[str], data: bytes) -> bool:
+    """Run *cmd*, pipe *data* to stdin, return success bool."""
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=data,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def _try_tool(tool: str, args: list[str], data: bytes) -> bool:
+    """Check if *tool* exists on PATH, then run with *args*."""
+    if shutil.which(tool) is None:
+        return False
+    return _run([tool] + args, data)
+
+
+def copy_to_clipboard(text: str) -> ClipboardResult:
+    """Copy *text* to the system clipboard.
+
+    Returns a :class:`ClipboardResult` indicating success/failure and which
+    backend was used.
+    """
+    if not text:
+        return ClipboardResult(ok=False, backend="", error="empty text")
+
+    # ── Windows ─────────────────────────────────────────────────
+    if sys.platform == "win32":
+        # clip.exe expects UTF-16 LE on stdin for full Unicode support
+        data = text.encode("utf-16-le")
+        # Fallback: utf-8 if utf-16 fails (very old Windows)
+        if _try_tool("clip", [], data):
+            return ClipboardResult(ok=True, backend="clip.exe", error="")
+        # Try utf-8 as last resort
+        if _try_tool("clip", [], text.encode("utf-8")):
+            return ClipboardResult(ok=True, backend="clip.exe", error="")
+        return ClipboardResult(
+            ok=False, backend="", error="clip.exe failed or not found",
+        )
+
+    data_utf8: bytes = text.encode("utf-8")
+
+    # ── macOS ───────────────────────────────────────────────────
+    if sys.platform == "darwin":
+        if _try_tool("pbcopy", [], data_utf8):
+            return ClipboardResult(ok=True, backend="pbcopy", error="")
+        return ClipboardResult(
+            ok=False, backend="", error="pbcopy not found",
+        )
+
+    # ── Linux / BSD ─────────────────────────────────────────────
+
+    # 1) Wayland
+    if _is_wayland():
+        if _try_tool("wl-copy", [], data_utf8):
+            return ClipboardResult(ok=True, backend="wl-copy", error="")
+        # Wayland session but wl-copy missing — try X11 tools via XWayland
+        if _is_x11():
+            if _try_tool("xclip", ["-selection", "clipboard"], data_utf8):
+                return ClipboardResult(ok=True, backend="xclip", error="")
+            if _try_tool("xsel", ["--clipboard", "--input"], data_utf8):
+                return ClipboardResult(ok=True, backend="xsel", error="")
+        return ClipboardResult(
+            ok=False, backend="",
+            error="Wayland: wl-copy not found; install wl-clipboard",
+        )
+
+    # 2) X11
+    if _is_x11():
+        if _try_tool("xclip", ["-selection", "clipboard"], data_utf8):
+            return ClipboardResult(ok=True, backend="xclip", error="")
+        if _try_tool("xsel", ["--clipboard", "--input"], data_utf8):
+            return ClipboardResult(ok=True, backend="xsel", error="")
+        return ClipboardResult(
+            ok=False, backend="",
+            error="X11: install xclip or xsel",
+        )
+
+    # 3) No display server (SSH, TTY, container)
+    return ClipboardResult(
+        ok=False, backend="",
+        error="no display server detected (no WAYLAND_DISPLAY or DISPLAY)",
+    )
+
+
+def available_backend() -> str | None:
+    """Return the name of the first usable clipboard tool, or *None*.
+
+    Useful for showing status in the TUI without actually copying anything.
+    """
+    if sys.platform == "win32":
+        return "clip.exe" if shutil.which("clip") else None
+    if sys.platform == "darwin":
+        return "pbcopy" if shutil.which("pbcopy") else None
+
+    if _is_wayland() and shutil.which("wl-copy"):
+        return "wl-copy"
+    if _is_x11():
+        if shutil.which("xclip"):
+            return "xclip"
+        if shutil.which("xsel"):
+            return "xsel"
+    return None
+└────────────────────────────────────────
+
+┌─── 📄 [11/19] sfc/collector.py
+"""File scanning, tree rendering, safe reading, and output assembly."""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import AppConfig
+
+
+# ════════════════════════════════════════════════════════════════════
+#  UTILITY HELPERS
+# ════════════════════════════════════════════════════════════════════
+
+def term_width() -> int:
+    """Current terminal column count (fallback 80)."""
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
+
+
+def fmt_size(n: int) -> str:
+    """Human-readable byte size."""
+    if n >= 1_048_576:
+        return f"{n / 1_048_576:.1f}M"
+    if n >= 1_024:
+        return f"{n / 1_024:.1f}K"
+    return f"{n}B"
+
+
+def read_safe(fp: Path) -> str:
+    """Read file trying multiple encodings, never raises."""
+    for enc in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
+        try:
+            return fp.read_text(encoding=enc)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+        except Exception as exc:
+            return f"[ERR: {exc}]"
+    return "[ERR: encoding]"
+
+
+# ════════════════════════════════════════════════════════════════════
+#  FILE SCANNING
+# ════════════════════════════════════════════════════════════════════
+
+def _is_self_file(name: str) -> bool:
+    """Files belonging to sfc itself — always skip."""
+    from .patterns import SELF_FILES, COLLECTED_PREFIX, SFC_DOT_PREFIX
+
+    return (
+        name in SELF_FILES
+        or name.startswith(COLLECTED_PREFIX)
+        or name.startswith(SFC_DOT_PREFIX)
+    )
+
+
+def get_all_files(
+    root: Path,
+    cfg: AppConfig,
+    extra_ignore: set[str] | None = None,
+) -> list[Path]:
+    """Recursively collect project files respecting config ignore rules.
+
+    Parameters
+    ----------
+    root
+        Project root directory (resolved).
+    cfg
+        Current application config (ignore lists read from here).
+    extra_ignore
+        Optional additional directory names to skip (e.g. from CLI ``-i``).
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of absolute paths.
+    """
+    ignore_dirs: set[str] = cfg.ignore_dirs_set()
+    if extra_ignore:
+        ignore_dirs |= extra_ignore
+    ignore_files: set[str] = cfg.ignore_files_set()
+    ignore_ext: set[str] = cfg.ignore_ext_set()
+    root = root.resolve()
+    result: list[Path] = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune ignored directories in-place (also sorts for determinism)
+        dirnames[:] = sorted(d for d in dirnames if d not in ignore_dirs)
+
+        for fn in sorted(filenames):
+            if fn in ignore_files:
+                continue
+            if _is_self_file(fn):
+                continue
+            fp = Path(dirpath) / fn
+            if fp.suffix.lower() in ignore_ext:
+                continue
+            result.append(fp)
+
+    return result
+
+
+# ════════════════════════════════════════════════════════════════════
+#  TREE RENDERING
+# ════════════════════════════════════════════════════════════════════
+
+def build_tree(
+    root: Path,
+    files: list[Path],
+    sizes: bool = False,
+) -> str:
+    """Build a visual ASCII tree string from a flat list of files.
+
+    The output mimics ``tree(1)`` with proper branch characters (``├──`` /
+    ``└──``) so the resulting text is unambiguous when pasted into an LLM
+    context window.
+    """
+    root = root.resolve()
+    lines: list[str] = [f"📦 {root.name}/"]
+
+    rels: list[Path] = sorted(f.relative_to(root) for f in files)
+    if not rels:
+        return lines[0]
+
+    # Build lookup: parent → sorted children (dirs first, then files)
+    from collections import defaultdict
+
+    children_map: dict[str, list[tuple[str, bool]]] = defaultdict(list)
+    # bool → True = directory, False = file
+
+    all_dirs: set[str] = set()
+    for r in rels:
+        for parent in r.parents:
+            pstr = str(parent)
+            if pstr != ".":
+                all_dirs.add(pstr)
+
+    # Register directory entries
+    _registered_dirs: set[tuple[str, str]] = set()
+    for d in sorted(all_dirs):
+        dp = Path(d)
+        parent_key = str(dp.parent) if str(dp.parent) != "." else ""
+        entry = (parent_key, dp.name)
+        if entry not in _registered_dirs:
+            _registered_dirs.add(entry)
+            children_map[parent_key].append((dp.name, True))
+
+    # Register file entries
+    file_size_map: dict[str, int] = {}
+    for r in rels:
+        parent_key = str(r.parent) if str(r.parent) != "." else ""
+        children_map[parent_key].append((r.name, False))
+        if sizes:
+            full = root / r
+            try:
+                file_size_map[str(r)] = full.stat().st_size
+            except OSError:
+                file_size_map[str(r)] = 0
+
+    # Sort each bucket: directories first (alphabetical), then files (alphabetical)
+    for key in children_map:
+        children_map[key].sort(key=lambda x: (not x[1], x[0].lower()))
+
+    # Deduplicate (dir entries may be added multiple times from nested paths)
+    for key in children_map:
+        seen: list[tuple[str, bool]] = []
+        seen_set: set[tuple[str, bool]] = set()
+        for item in children_map[key]:
+            if item not in seen_set:
+                seen.append(item)
+                seen_set.add(item)
+        children_map[key] = seen
+
+    # Recursive render
+    def _render(parent_key: str, prefix: str) -> None:
+        items = children_map.get(parent_key, [])
+        for idx, (name, is_dir) in enumerate(items):
+            is_last: bool = idx == len(items) - 1
+            connector: str = "└── " if is_last else "├── "
+            child_prefix: str = prefix + ("    " if is_last else "│   ")
+
+            if is_dir:
+                lines.append(f"{prefix}{connector}📂 {name}/")
+                child_key: str = f"{parent_key}/{name}" if parent_key else name
+                _render(child_key, child_prefix)
+            else:
+                suffix: str = ""
+                if sizes:
+                    rel_str: str = f"{parent_key}/{name}" if parent_key else name
+                    sz: int = file_size_map.get(rel_str, 0)
+                    suffix = f"  ({fmt_size(sz)})"
+                lines.append(f"{prefix}{connector}📄 {name}{suffix}")
+
+    _render("", "")
+
+    return "\n".join(lines)
+
+
+# ════════════════════════════════════════════════════════════════════
+#  OUTPUT ASSEMBLY
+# ════════════════════════════════════════════════════════════════════
+
+def assemble_context(
+    root: Path,
+    files: list[Path],
+    mode: str = "all",
+    show_tree: bool = True,
+    max_chars: int = 90_000,
+) -> list[str]:
+    """Build the final context string(s) ready for file write / clipboard.
+
+    Parameters
+    ----------
+    root
+        Project root.
+    files
+        Absolute paths of selected files.
+    mode
+        Tag shown in header (``all``, ``pick``, ``preset:name``, …).
+    show_tree
+        Whether to include the ASCII tree section.
+    max_chars
+        Maximum character count per part before splitting.
+
+    Returns
+    -------
+    list[str]
+        One or more text chunks.  Usually one unless the context exceeds
+        *max_chars*.
+    """
+    if not files:
+        return []
+
+    root = root.resolve()
+    total: int = len(files)
+    now: datetime = datetime.now()
+
+    # ── individual file blocks ──
+    blocks: list[str] = []
+    for i, fp in enumerate(files, 1):
+        rel: str = str(fp.relative_to(root)).replace("\\", "/")
+        content: str = read_safe(fp)
+        if not content.endswith("\n"):
+            content += "\n"
+        blocks.append(
+            f"┌─── 📄 [{i}/{total}] {rel}\n"
+            f"{content}"
+            f"└{'─' * 40}\n\n"
+        )
+
+    # ── tree section ──
+    tree_section: str = ""
+    if show_tree:
+        tbody: str = build_tree(root, files)
+        tree_section = (
+            f"┌{'─' * 12}\n"
+            f"│ 🗂️  STRUCTURE\n"
+            f"├{'─' * 12}\n"
+        )
+        for line in tbody.split("\n"):
+            tree_section += f"│ {line}\n"
+        tree_section += f"└{'─' * 12}\n\n"
+
+    # ── header / continuation / footer builders ──
+    def _header(part: int | None = None, total_parts: int | None = None) -> str:
+        tag: str = ""
+        if part is not None and total_parts is not None and total_parts > 1:
+            tag = f" ({part}/{total_parts})"
+        return (
+            f"{'═' * 14}\n"
+            f"📋 {root.name} [{mode}]{tag}\n"
+            f"📅 {now:%d.%m.%Y %H:%M:%S}\n"
+            f"📄 Files: {total}\n"
+            f"{'═' * 14}\n\n"
+        )
+
+    def _continuation(part: int, total_parts: int) -> str:
+        return (
+            f"{'═' * 5}\n"
+            f"📋 {root.name} ({part}/{total_parts})\n"
+            f"↳ continued\n"
+            f"{'═' * 5}\n\n"
+        )
+
+    def _footer(part: int, total_parts: int, is_last: bool) -> str:
+        if is_last:
+            return f"{'═' * 5}\n✅ End\n{'═' * 5}\n"
+        return f"{'═' * 5}\n➡️ Part {part + 1}/{total_parts}\n{'═' * 5}\n"
+
+    # ── splitting into parts ──
+    initial: str = _header() + tree_section
+    raw_parts: list[str] = []
+    current: str = initial
+    first: bool = True
+
+    for block in blocks:
+        if len(current) + len(block) > max_chars and current != initial:
+            raw_parts.append(current)
+            current = ""
+            first = False
+        if not current:
+            current = initial if first else ""
+        current += block
+
+    if current:
+        raw_parts.append(current)
+
+    # ── fix headers & footers ──
+    tp: int = len(raw_parts)
+    final: list[str] = []
+    for idx, part in enumerate(raw_parts):
+        if idx == 0 and tp > 1:
+            part = part.replace(_header(), _header(1, tp), 1)
+        elif idx > 0:
+            part = _continuation(idx + 1, tp) + part
+        part += _footer(idx + 1, tp, idx == tp - 1)
+        final.append(part)
+
+    return final
+
+
+def write_output(
+    root: Path,
+    files: list[Path],
+    output: str,
+    mode: str = "panel",
+    show_tree: bool = True,
+    max_chars: int = 90_000,
+) -> list[tuple[Path, int]]:
+    """Assemble context and write to file(s).  Returns ``[(path, char_count)]``."""
+    parts: list[str] = assemble_context(root, files, mode, show_tree, max_chars)
+    if not parts:
+        return []
+
+    out_path = Path(output)
+    stem: str = out_path.stem
+    suffix: str = out_path.suffix or ".txt"
+    created: list[tuple[Path, int]] = []
+
+    for idx, content in enumerate(parts):
+        if len(parts) == 1:
+            fn = out_path
+        else:
+            fn = out_path.parent / f"{stem}_p{idx + 1}{suffix}"
+        fn.parent.mkdir(parents=True, exist_ok=True)
+        fn.write_text(content, encoding="utf-8")
+        created.append((fn, len(content)))
+
+    return created
+└────────────────────────────────────────
+
+┌─── 📄 [12/19] sfc/config.py
+"""Persistent configuration (platform-aware) and per-project presets."""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import asdict, dataclass, field, fields as dc_fields
+from pathlib import Path
+from typing import Any
+
+from .version import APP_NAME
+from .patterns import (
+    DEFAULT_IGNORE_DIRS,
+    DEFAULT_IGNORE_FILES,
+    DEFAULT_IGNORE_EXTENSIONS,
+)
+
+
+# ── Platform config directory ───────────────────────────────────────
+
+def _config_dir() -> Path:
+    """``~/.config/sfc`` on POSIX, ``%APPDATA%\\sfc`` on Windows."""
+    if os.name == "nt":
+        base: str = os.environ.get("APPDATA", "")
+        if base:
+            return Path(base) / APP_NAME
+        return Path.home() / "AppData" / "Roaming" / APP_NAME
+    xdg: str = os.environ.get("XDG_CONFIG_HOME", "")
+    if xdg:
+        return Path(xdg) / APP_NAME
+    return Path.home() / ".config" / APP_NAME
+
+
+def config_path() -> Path:
+    """Full path to the global settings file."""
+    return _config_dir() / "cfg.setting.json"
+
+
+# ── AppConfig dataclass ─────────────────────────────────────────────
+
+@dataclass
+class AppConfig:
+    """All user-facing settings.  Serialised as JSON."""
+
+    output: str = "collected_output.txt"
+    max_chars: int = 90_000
+    show_tree: bool = True
+    auto_copy: bool = False
+    page_size: int = 20
+    ignore_dirs: list[str] = field(
+        default_factory=lambda: sorted(DEFAULT_IGNORE_DIRS),
+    )
+    ignore_files: list[str] = field(
+        default_factory=lambda: sorted(DEFAULT_IGNORE_FILES),
+    )
+    ignore_extensions: list[str] = field(
+        default_factory=lambda: sorted(DEFAULT_IGNORE_EXTENSIONS),
+    )
+
+    # ── post-init validation ──
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.ignore_dirs, list):
+            self.ignore_dirs = sorted(DEFAULT_IGNORE_DIRS)
+        if not isinstance(self.ignore_files, list):
+            self.ignore_files = sorted(DEFAULT_IGNORE_FILES)
+        if not isinstance(self.ignore_extensions, list):
+            self.ignore_extensions = sorted(DEFAULT_IGNORE_EXTENSIONS)
+        try:
+            self.max_chars = max(1_000, int(self.max_chars))
+        except (TypeError, ValueError):
+            self.max_chars = 90_000
+        try:
+            self.page_size = max(5, min(100, int(self.page_size)))
+        except (TypeError, ValueError):
+            self.page_size = 20
+
+    # ── convenience accessors ──
+
+    def ignore_dirs_set(self) -> set[str]:
+        return set(self.ignore_dirs)
+
+    def ignore_files_set(self) -> set[str]:
+        return set(self.ignore_files)
+
+    def ignore_ext_set(self) -> set[str]:
+        return set(self.ignore_extensions)
+
+    def reset_ignores(self) -> None:
+        """Restore all three ignore lists to built-in defaults."""
+        self.ignore_dirs = sorted(DEFAULT_IGNORE_DIRS)
+        self.ignore_files = sorted(DEFAULT_IGNORE_FILES)
+        self.ignore_extensions = sorted(DEFAULT_IGNORE_EXTENSIONS)
+
+
+# ── Global config persistence ───────────────────────────────────────
+
+def load_config() -> AppConfig:
+    """Load from disk or create defaults (auto-saves on first run)."""
+    fp: Path = config_path()
+    if not fp.exists():
+        cfg = AppConfig()
+        save_config(cfg)
+        return cfg
+    try:
+        raw: dict[str, Any] = json.loads(fp.read_text("utf-8"))
+        valid_keys: set[str] = {f.name for f in dc_fields(AppConfig)}
+        kw: dict[str, Any] = {k: v for k, v in raw.items() if k in valid_keys}
+        return AppConfig(**kw)
+    except Exception:
+        return AppConfig()
+
+
+def save_config(cfg: AppConfig) -> None:
+    """Write current config to disk (creates parent dirs)."""
+    fp: Path = config_path()
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    fp.write_text(
+        json.dumps(asdict(cfg), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+# ── Per-project presets ─────────────────────────────────────────────
+
+_PRESETS_FILE: str = ".sfc-presets.json"
+
+
+def presets_file(root: Path) -> Path:
+    """Return preset file path for a given project root."""
+    return root / _PRESETS_FILE
+
+
+def load_presets(root: Path) -> dict[str, list[str]]:
+    fp: Path = presets_file(root)
+    if not fp.exists():
+        return {}
+    try:
+        data: Any = json.loads(fp.read_text("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_presets(data: dict[str, list[str]], root: Path) -> None:
+    fp: Path = presets_file(root)
+    fp.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+└────────────────────────────────────────
+
+┌─── 📄 [13/19] sfc/patterns.py
+"""Default ignore patterns, self-identification files, and glob resolution."""
+
+from __future__ import annotations
+
+import fnmatch
+from pathlib import Path
+
+
+# ── Default ignore sets (immutable) ─────────────────────────────────
+
+DEFAULT_IGNORE_DIRS: frozenset[str] = frozenset({
+    "__pycache__", ".git", ".svn", ".hg",
+    "node_modules", ".venv", "venv", "env",
+    ".idea", ".vscode", ".vs",
+    "dist", "build", "__MACOSX",
+    ".mypy_cache", ".pytest_cache", ".tox", ".nox",
+    ".eggs", ".ruff_cache",
+    ".terraform", ".gradle", ".cargo",
+    ".next", ".nuxt", ".parcel-cache",
+})
+
+DEFAULT_IGNORE_FILES: frozenset[str] = frozenset({
+    ".DS_Store", "Thumbs.db", "desktop.ini",
+    ".gitignore", ".gitattributes", ".gitmodules",
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "poetry.lock", "Pipfile.lock", "composer.lock",
+    ".env", ".env.local", ".env.production",
+})
+
+DEFAULT_IGNORE_EXTENSIONS: frozenset[str] = frozenset({
+    # Compiled / object
+    ".pyc", ".pyo", ".pyd", ".class", ".o", ".obj",
+    ".exe", ".dll", ".so", ".dylib", ".a", ".lib",
+    # Images
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp",
+    ".ico", ".svg", ".webp", ".tiff",
+    # Media
+    ".mp3", ".mp4", ".avi", ".mov", ".mkv",
+    ".wav", ".flac", ".ogg",
+    # Archives
+    ".zip", ".tar", ".gz", ".bz2", ".xz",
+    ".rar", ".7z", ".zst",
+    # Documents (binary)
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+    ".ppt", ".pptx",
+    # Databases
+    ".db", ".sqlite", ".sqlite3",
+    # Fonts / misc binary
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    # Source maps
+    ".map",
+})
+
+SELF_FILES: frozenset[str] = frozenset({
+    "sfc.py", "sfc.pyz",
+})
+
+COLLECTED_PREFIX: str = "collected_"
+SFC_DOT_PREFIX: str = ".sfc-"
+
+
+# ── In-app help text ────────────────────────────────────────────────
+
+HELP_GLOB: str = """\
+ ╭─ Glob Pattern Reference ──────────────────────────────────╮
+ │                                                           │
+ │  *          matches everything inside one segment         │
+ │  ?          matches any single character                  │
+ │  [seq]      matches any character in seq                  │
+ │  [!seq]     matches any character NOT in seq              │
+ │  **         not supported by fnmatch (use path segments)  │
+ │                                                           │
+ │  Examples:                                                │
+ │    *.py             all Python files (any depth)          │
+ │    src/*.ts         .ts files directly in src/            │
+ │    test_*.py        files starting with test_             │
+ │    *.service.ts     Angular services                      │
+ │    config/*         everything inside config/             │
+ │    **/utils/*.py    utils dirs at any depth               │
+ │                                                           │
+ ╰───────────────────────────────────────────────────────────╯"""
+
+HELP_PRESETS: str = """\
+ ╭─ Presets Guide ───────────────────────────────────────────╮
+ │                                                          │
+ │  Presets save named file selections for quick reuse.     │
+ │  Stored per-project in .sfc-presets.json at project root.│
+ │                                                          │
+ │  Save:   select files → Presets → Save                   │
+ │  Use:    Presets → Use → pick number                     │
+ │  Export: Presets → Export → direct collect + clipboard    │
+ │  Delete: Presets → Delete → pick number                  │
+ │                                                          │
+ │  CLI:                                                    │
+ │    sfc preset save myconf "src/config/*" ".env.example"  │
+ │    sfc preset myconf                                     │
+ │    sfc preset list                                       │
+ │    sfc preset delete myconf                              │
+ │                                                          │
+ ╰──────────────────────────────────────────────────────────╯"""
+
+HELP_FILTERS: str = """\
+ ╭─ Filter & Ignore Guide ──────────────────────────────────╮
+ │                                                          │
+ │  Three ignore categories (editable in Settings):         │
+ │                                                          │
+ │  Directories:  folder names skipped during scan          │
+ │     e.g.  node_modules, .git, __pycache__                │
+ │                                                          │
+ │  Files:        exact filenames always excluded            │
+ │     e.g.  .DS_Store, package-lock.json, .env             │
+ │                                                          │
+ │  Extensions:   file suffixes excluded by extension        │
+ │     e.g.  .pyc, .jpg, .zip, .pdf                        │
+ │                                                          │
+ │  Browse filter (/):  live substring search on paths      │
+ │  Browse pattern (p): select by glob in current view      │
+ │  Reset to defaults:  Settings → Ignoring → Reset         │
+ │                                                          │
+ ╰──────────────────────────────────────────────────────────╯"""
+
+
+# ── Resolution helpers ──────────────────────────────────────────────
+
+def matches_pattern(rel_path: str, name: str, pattern: str) -> bool:
+    """Return *True* if *rel_path* or *name* matches *pattern* (fnmatch)."""
+    return (
+        fnmatch.fnmatch(rel_path, pattern)
+        or fnmatch.fnmatch(name, pattern)
+        or fnmatch.fnmatch(rel_path, "*/" + pattern)
+    )
+
+
+def resolve_patterns(
+    root: Path,
+    patterns: list[str],
+    all_files: list[Path],
+) -> tuple[list[Path], list[str]]:
+    """Resolve user-supplied paths / dirs / globs against *all_files*.
+
+    Returns
+    -------
+    matched
+        Sorted list of files that matched at least one pattern.
+    unmatched
+        Patterns that produced zero hits.
+    """
+    picked: list[Path] = []
+    seen: set[Path] = set()
+    unmatched: list[str] = []
+
+    for raw in patterns:
+        pat: str = raw.strip().strip("\"'").rstrip("/\\")
+        if not pat:
+            continue
+
+        hit_count_before: int = len(picked)
+        target: Path = root / pat
+
+        # 1) Exact file
+        if target.is_file() and target not in seen:
+            picked.append(target)
+            seen.add(target)
+            continue
+
+        # 2) Directory → every file underneath
+        if target.is_dir():
+            for f in all_files:
+                if f.is_relative_to(target) and f not in seen:
+                    picked.append(f)
+                    seen.add(f)
+            if len(picked) > hit_count_before:
+                continue
+
+        # 3) Glob / fnmatch against relative paths
+        for f in all_files:
+            rel: str = str(f.relative_to(root)).replace("\\", "/")
+            if matches_pattern(rel, f.name, pat) and f not in seen:
+                picked.append(f)
+                seen.add(f)
+
+        if len(picked) == hit_count_before:
+            unmatched.append(pat)
+
+    picked.sort(key=lambda f: str(f.relative_to(root)))
+    return picked, unmatched
+└────────────────────────────────────────
+
+┌─── 📄 [14/19] sfc/tui/__init__.py
+"""TUI engine factory — returns the right backend for the current OS."""
+
+from __future__ import annotations
+
+import os
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .base import Engine
+
+
+def get_engine() -> Engine:
+    """Instantiate and return the platform-appropriate TUI engine.
+
+    - Windows → :class:`WinEngine` (msvcrt + ctypes console API)
+    - POSIX   → :class:`CursesEngine` (stdlib curses)
+
+    Raises
+    ------
+    RuntimeError
+        If no usable backend can be initialised.
+    """
+    if os.name == "nt":
+        from .win_tui import WinEngine
+        return WinEngine()
+
+    # POSIX: curses requires a real terminal
+    if not (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()):
+        raise RuntimeError(
+            "sfc interactive mode requires a terminal (stdout is not a TTY)"
+        )
+
+    from .curses_tui import CursesEngine
+    return CursesEngine()
+└────────────────────────────────────────
+
+═════
+➡️ Part 2/2
+═════

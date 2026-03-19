@@ -5,6 +5,8 @@ from __future__ import annotations
 import curses
 import locale
 import os
+import re
+import unicodedata
 
 from .base import Engine, Key, KeyEvent, MenuItem
 
@@ -19,6 +21,9 @@ _CP_DIM: int = 4
 _CP_FOOTER: int = 5
 _CP_ERROR: int = 6
 _CP_INPUT: int = 7
+_CP_ACTIVE: int = 8
+_CP_EXIT: int = 9
+_CP_INFOBOX: int = 10
 
 
 def _can_unicode() -> bool:
@@ -35,6 +40,7 @@ class CursesEngine(Engine):
         self._scr: curses.window | None = None
         self._started: bool = False
         self._unicode: bool = False
+        self._header_rows: int = 4
 
     # ════════════════════════════════════════════════════════════════
     #  LIFECYCLE
@@ -71,6 +77,9 @@ class CursesEngine(Engine):
             curses.init_pair(_CP_FOOTER, curses.COLOR_YELLOW, -1)
             curses.init_pair(_CP_ERROR, curses.COLOR_RED, -1)
             curses.init_pair(_CP_INPUT, curses.COLOR_WHITE, curses.COLOR_BLUE)
+            curses.init_pair(_CP_ACTIVE, curses.COLOR_GREEN, -1)
+            curses.init_pair(_CP_EXIT, curses.COLOR_RED, -1)
+            curses.init_pair(_CP_INFOBOX, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
         self._started = True
 
@@ -117,11 +126,11 @@ class CursesEngine(Engine):
         if row < 0 or row >= rows or col < 0 or col >= cols:
             return
 
-        # Truncate to available width
-        max_len = cols - col - 1
-        if max_len <= 0:
+        # Truncate by terminal cell width (not python len) for unicode safety.
+        max_cells = cols - col - 1
+        if max_cells <= 0:
             return
-        text = text[:max_len]
+        text = self._fit_to_columns(text, max_cells)
 
         try:
             self._scr.addstr(row, col, text, attr)
@@ -129,9 +138,48 @@ class CursesEngine(Engine):
             # Fallback: strip non-ASCII characters and retry
             cleaned = self._ascii_fallback(text)
             try:
-                self._scr.addstr(row, col, cleaned[:max_len], attr)
+                self._scr.addstr(row, col, self._fit_to_columns(cleaned, max_cells), attr)
             except curses.error:
                 pass
+
+    def _char_cells(self, ch: str) -> int:
+        """Approximate terminal cell width for a single unicode char."""
+        if not ch:
+            return 0
+        if unicodedata.combining(ch):
+            return 0
+        if ch in ("\ufe0e", "\ufe0f"):  # text/emoji variation selectors
+            return 0
+        if unicodedata.east_asian_width(ch) in ("W", "F"):
+            return 2
+        return 1
+
+    def _fit_to_columns(self, text: str, max_cells: int) -> str:
+        """Return prefix of *text* that fits in *max_cells* terminal cells."""
+        used: int = 0
+        out: list[str] = []
+        for ch in text:
+            w = self._char_cells(ch)
+            if used + w > max_cells:
+                break
+            out.append(ch)
+            used += w
+        return "".join(out)
+
+    def _cells_len(self, text: str) -> int:
+        return sum(self._char_cells(ch) for ch in text)
+
+    def _handle_resize(self) -> None:
+        """Synchronize curses internal size state after terminal resize."""
+        assert self._scr is not None
+        try:
+            curses.update_lines_cols()
+            rows, cols = self._scr.getmaxyx()
+            curses.resizeterm(rows, cols)
+            self._scr.erase()
+            self._scr.refresh()
+        except curses.error:
+            pass
 
     def _ascii_fallback(self, text: str) -> str:
         """Replace emoji and box-drawing chars with ASCII equivalents."""
@@ -205,6 +253,8 @@ class CursesEngine(Engine):
             27: Key.ESCAPE,
         }
         key = _MAP.get(ch, Key.UNKNOWN)
+        if key is Key.RESIZE:
+            self._handle_resize()
         if key is Key.UNKNOWN and 32 <= ch < 127:
             return KeyEvent(Key.CHAR, chr(ch))
         return KeyEvent(key)
@@ -300,15 +350,81 @@ class CursesEngine(Engine):
     def draw_header(self, lines: list[str]) -> None:
         assert self._scr is not None
         rows, cols = self._scr.getmaxyx()
-        attr = curses.color_pair(_CP_HEADER) | curses.A_BOLD
-        for i, line in enumerate(lines):
-            if i >= rows - 2:
+        if rows < 6 or cols < 30:
+            self._header_rows = 2
+            attr = curses.color_pair(_CP_HEADER) | curses.A_BOLD
+            for i, line in enumerate(lines[:1]):
+                self._safe_addstr(i, 0, line, attr)
+            self._safe_addstr(1, 0, "-" * max(1, cols - 1), curses.color_pair(_CP_DIM))
+            self._scr.refresh()
+            return
+
+        title_src: str = lines[0].strip() if lines else "Smart File Collector"
+        info_src: str = lines[1].strip() if len(lines) > 1 else ""
+        title_text = f"— {title_src.strip('━ ').strip()} —"
+
+        if self._unicode:
+            tl, tr, bl, br = "╔", "╗", "╚", "╝"
+            hz, vt = "═", "║"
+            stl, str_, sbl, sbr = "╭", "╮", "╰", "╯"
+            shz, svt = "─", "│"
+        else:
+            tl = tr = bl = br = "+"
+            hz, vt = "=", "|"
+            stl = str_ = sbl = sbr = "+"
+            shz, svt = "-", "|"
+
+        title_w = min(cols - 2, max(32, self._cells_len(title_text) + 4))
+        title_x = max(0, (cols - title_w) // 2)
+        title_inner = max(1, title_w - 2)
+
+        self._safe_addstr(0, title_x, tl + (hz * title_inner) + tr, curses.color_pair(_CP_HEADER))
+        self._safe_addstr(1, title_x, vt, curses.color_pair(_CP_HEADER))
+        self._safe_addstr(1, title_x + title_w - 1, vt, curses.color_pair(_CP_HEADER))
+        self._safe_addstr(1, title_x + 1, " " * max(1, title_w - 2), curses.color_pair(_CP_HEADER))
+        self._safe_addstr(1, title_x + 2, title_text, curses.color_pair(_CP_HEADER) | curses.A_BOLD)
+        self._safe_addstr(2, title_x, bl + (hz * title_inner) + br, curses.color_pair(_CP_HEADER))
+
+        proj = "?"
+        files = "?"
+        selected = ""
+        m_proj = re.search(r"📂\s*([^│|]+)", info_src)
+        if m_proj:
+            proj = m_proj.group(1).strip()
+        m_files = re.search(r"📄\s*([^│|]+)", info_src)
+        if m_files:
+            files = m_files.group(1).strip()
+        m_sel = re.search(r"✓\s*([^│|]+)", info_src)
+        if m_sel:
+            selected = m_sel.group(1).strip()
+
+        pieces = [("📁", curses.color_pair(_CP_ACTIVE) | curses.A_BOLD), (f" Project: {proj}", curses.color_pair(_CP_INFOBOX))]
+        pieces.extend([("   ", curses.color_pair(_CP_INFOBOX)), ("📄", curses.color_pair(_CP_ACTIVE) | curses.A_BOLD), (f" Files: {files}", curses.color_pair(_CP_INFOBOX))])
+        if selected:
+            pieces.extend([("   ", curses.color_pair(_CP_INFOBOX)), ("✓", curses.color_pair(_CP_ACTIVE) | curses.A_BOLD), (f" Selected: {selected}", curses.color_pair(_CP_INFOBOX))])
+        info_text = "".join(p[0] for p in pieces)
+        info_w = min(cols - 4, max(24, self._cells_len(info_text) + 4))
+        info_x = max(0, (cols - info_w) // 2)
+
+        self._safe_addstr(3, info_x, stl + (shz * (info_w - 2)) + str_, curses.color_pair(_CP_DIM))
+        self._safe_addstr(4, info_x, svt, curses.color_pair(_CP_DIM))
+        self._safe_addstr(4, info_x + info_w - 1, svt, curses.color_pair(_CP_DIM))
+        self._safe_addstr(4, info_x + 1, " " * max(1, info_w - 2), curses.color_pair(_CP_INFOBOX))
+        cur_x = info_x + 2
+        max_inner = max(1, info_w - 4)
+        used = 0
+        for text, attr in pieces:
+            part = self._fit_to_columns(text, max_inner - used)
+            if not part:
                 break
-            self._safe_addstr(i, 0, line, attr)
-        sep_row = len(lines)
-        if sep_row < rows - 1:
-            sep = "-" * min(cols - 1, 60)
-            self._safe_addstr(sep_row, 0, sep, curses.color_pair(_CP_DIM))
+            self._safe_addstr(4, cur_x, part, attr)
+            width = self._cells_len(part)
+            cur_x += width
+            used += width
+            if used >= max_inner:
+                break
+        self._safe_addstr(5, info_x, sbl + (shz * (info_w - 2)) + sbr, curses.color_pair(_CP_DIM))
+        self._header_rows = 7
         self._scr.refresh()
 
     def draw_items(
@@ -339,10 +455,10 @@ class CursesEngine(Engine):
                 mark: str = "x" if item.checked else " "
                 prefix = f" [{mark}] "
             else:
-                prefix = "  "
+                prefix = "   "
 
             if is_cur:
-                prefix = " >" + prefix[2:]
+                prefix = ">" + prefix[1:]
 
             label: str = item.label
             suffix: str = f"  {item.suffix}" if item.suffix else ""
@@ -353,10 +469,17 @@ class CursesEngine(Engine):
 
             line: str = f"{prefix}{label}{suffix}"
 
+            if label.strip("─- "):
+                is_separator = False
+            else:
+                is_separator = True
+
             if is_cur:
-                attr = curses.color_pair(_CP_CURSOR) | curses.A_BOLD
+                attr = curses.color_pair(_CP_ACTIVE) | curses.A_BOLD
             elif not item.enabled:
                 attr = curses.color_pair(_CP_DIM) | curses.A_DIM
+            elif "❌" in label:
+                attr = curses.color_pair(_CP_EXIT) | curses.A_BOLD
             elif item.checked:
                 attr = curses.color_pair(_CP_CHECKED)
             else:
@@ -364,7 +487,11 @@ class CursesEngine(Engine):
 
             # Clear row first
             self._safe_addstr(row, 0, " " * (cols - 1), curses.color_pair(_CP_NORMAL))
-            self._safe_addstr(row, 0, line, attr)
+            if is_separator:
+                sep_char = "═" if self._unicode else "-"
+                self._safe_addstr(row, 1, sep_char * max(1, cols - 3), curses.color_pair(_CP_DIM))
+            else:
+                self._safe_addstr(row, 0, line, attr)
 
         # Scroll indicators (ASCII safe)
         if offset > 0:
@@ -379,12 +506,16 @@ class CursesEngine(Engine):
     def draw_footer(self, lines: list[str]) -> None:
         assert self._scr is not None
         rows, cols = self._scr.getmaxyx()
+        top = rows - len(lines) - 1
+        if top >= 0:
+            bar = "═" if self._unicode else "-"
+            self._safe_addstr(top, 0, bar * max(1, cols - 1), curses.color_pair(_CP_DIM))
         for i, line in enumerate(lines):
             row = rows - len(lines) + i
             if row < 0:
                 continue
             self._safe_addstr(row, 0, " " * (cols - 1))
-            self._safe_addstr(row, 1, line, curses.color_pair(_CP_FOOTER))
+            self._safe_addstr(row, 1, line, curses.color_pair(_CP_FOOTER) | curses.A_BOLD)
         self._scr.refresh()
 
     def draw_text_block(self, text: str) -> None:
@@ -395,18 +526,71 @@ class CursesEngine(Engine):
         while True:
             rows, cols = self._scr.getmaxyx()
             self._scr.erase()
-            visible = rows - 2
+            if self._unicode:
+                tl, tr, bl, br = "╔", "╗", "╚", "╝"
+                hz, vt = "═", "║"
+                up_sym, down_sym = "▲", "▼"
+            else:
+                tl = tr = bl = br = "+"
+                hz, vt = "-", "|"
+                up_sym, down_sym = "^", "v"
+
+            # Outer framed panel with inner padding for improved readability.
+            panel_x: int = 1
+            panel_y: int = 0
+            panel_w: int = max(10, cols - 2)
+            panel_h: int = max(6, rows - 1)
+            right = panel_x + panel_w - 1
+            bottom = panel_y + panel_h - 1
+
+            self._safe_addstr(panel_y, panel_x, tl + (hz * max(1, panel_w - 2)) + tr, curses.color_pair(_CP_DIM))
+            for r in range(panel_y + 1, bottom):
+                self._safe_addstr(r, panel_x, vt, curses.color_pair(_CP_DIM))
+                self._safe_addstr(r, right, vt, curses.color_pair(_CP_DIM))
+            self._safe_addstr(bottom, panel_x, bl + (hz * max(1, panel_w - 2)) + br, curses.color_pair(_CP_DIM))
+
+            pad_x: int = panel_x + 2
+            pad_y: int = panel_y + 1
+            text_w: int = max(1, panel_w - 4)
+            visible: int = max(1, panel_h - 2)
 
             for i in range(visible):
                 li = offset + i
                 if li >= len(text_lines):
                     break
-                self._safe_addstr(i, 0, text_lines[li], curses.color_pair(_CP_NORMAL))
+
+                line = text_lines[li]
+                attr = curses.color_pair(_CP_NORMAL)
+                stripped = line.strip()
+
+                # Basic hierarchy: section headers and important labels.
+                if stripped.startswith("##") or stripped.startswith("==") or stripped.startswith("┌"):
+                    attr = curses.color_pair(_CP_HEADER) | curses.A_BOLD
+                elif stripped.startswith("#"):
+                    attr = curses.color_pair(_CP_ACTIVE) | curses.A_BOLD
+                elif stripped.endswith(":") or stripped.startswith("Tip:"):
+                    attr = curses.color_pair(_CP_ACTIVE) | curses.A_BOLD
+                elif stripped.startswith("•") or stripped.startswith("- "):
+                    attr = curses.color_pair(_CP_NORMAL)
+                elif "Press any key" in stripped or "q/ESC" in stripped:
+                    attr = curses.color_pair(_CP_DIM) | curses.A_DIM
+
+                self._safe_addstr(pad_y + i, pad_x, " " * text_w, curses.color_pair(_CP_NORMAL))
+                self._safe_addstr(pad_y + i, pad_x, line, attr)
 
             total_pages = max(1, (len(text_lines) + visible - 1) // visible)
             cur_page = (offset // visible) + 1 if visible > 0 else 1
-            hint = f" Up/Down:scroll  q/ESC:back  ({cur_page}/{total_pages})"
-            self._safe_addstr(rows - 1, 0, hint, curses.color_pair(_CP_FOOTER))
+            hint = f" Up/Down:scroll  PgUp/PgDn:page  q/ESC:back "
+            self._safe_addstr(rows - 1, 1, " " * max(1, cols - 2), curses.color_pair(_CP_NORMAL))
+            self._safe_addstr(rows - 1, 1, hint, curses.color_pair(_CP_FOOTER) | curses.A_BOLD)
+
+            # Subtle scroll indicators + page info on right edge.
+            if offset > 0:
+                self._safe_addstr(panel_y + 1, right - 1, up_sym, curses.color_pair(_CP_FOOTER) | curses.A_DIM)
+            if offset + visible < len(text_lines):
+                self._safe_addstr(bottom - 1, right - 1, down_sym, curses.color_pair(_CP_FOOTER) | curses.A_DIM)
+            page_tag = f"{cur_page}/{total_pages}"
+            self._safe_addstr(rows - 1, max(1, cols - len(page_tag) - 2), page_tag, curses.color_pair(_CP_FOOTER) | curses.A_DIM)
             self._scr.refresh()
 
             ev = self.get_key()
@@ -451,15 +635,5 @@ class CursesEngine(Engine):
     # ════════════════════════════════════════════════════════════════
 
     def _get_item_start_row(self) -> int:
-        """Header lines + 1 separator.  Scan to find it reliably."""
-        assert self._scr is not None
-        rows, cols = self._scr.getmaxyx()
-        for r in range(min(10, rows)):
-            try:
-                raw = self._scr.instr(r, 0, min(3, cols))
-                # The separator is drawn as ASCII "-" now
-                if raw.startswith(b"-") or raw.startswith(b"="):
-                    return r + 1
-            except curses.error:
-                continue
-        return 4
+        """Return first row available for menu items."""
+        return self._header_rows

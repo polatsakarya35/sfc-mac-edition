@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, field, fields as dc_fields
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ from .patterns import (
 # ── Platform config directory ───────────────────────────────────────
 
 def _config_dir() -> Path:
-    """``~/.config/sfc`` on POSIX, ``%APPDATA%\\sfc`` on Windows."""
+    """Platform-aware config directory with safe fallbacks."""
     if os.name == "nt":
         base: str = os.environ.get("APPDATA", "")
         if base:
@@ -28,6 +29,8 @@ def _config_dir() -> Path:
     xdg: str = os.environ.get("XDG_CONFIG_HOME", "")
     if xdg:
         return Path(xdg) / APP_NAME
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / APP_NAME
     return Path.home() / ".config" / APP_NAME
 
 

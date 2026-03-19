@@ -1,0 +1,1497 @@
+═════
+📋 sfc (2/2)
+↳ continued
+═════
+
+┌─── 📄 [15/19] sfc/tui/base.py
+"""Abstract TUI engine protocol and shared key constants.
+
+Every concrete engine (curses, win32) implements :class:`Engine` so the
+application layer (``app.py``) never touches platform-specific code.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from enum import Enum, auto
+from typing import Callable, Sequence
+
+
+# ════════════════════════════════════════════════════════════════════
+#  KEY ENUMERATION
+# ════════════════════════════════════════════════════════════════════
+
+class Key(Enum):
+    """Logical key identifiers returned by :meth:`Engine.get_key`."""
+    UP = auto()
+    DOWN = auto()
+    LEFT = auto()
+    RIGHT = auto()
+    ENTER = auto()
+    SPACE = auto()
+    ESCAPE = auto()
+    BACKSPACE = auto()
+    TAB = auto()
+    HOME = auto()
+    END = auto()
+    PAGE_UP = auto()
+    PAGE_DOWN = auto()
+    DELETE = auto()
+    # Printable character — the actual char is stored separately
+    CHAR = auto()
+    # Terminal was resized
+    RESIZE = auto()
+    # Unknown / unmapped key
+    UNKNOWN = auto()
+
+
+class KeyEvent:
+    """A single key press event.
+
+    Attributes
+    ----------
+    key : Key
+        The logical key.
+    char : str
+        For ``Key.CHAR`` events, the actual character.  Empty otherwise.
+    """
+
+    __slots__ = ("key", "char")
+
+    def __init__(self, key: Key, char: str = "") -> None:
+        self.key = key
+        self.char = char
+
+    def __repr__(self) -> str:
+        if self.key is Key.CHAR:
+            return f"KeyEvent(CHAR, {self.char!r})"
+        return f"KeyEvent({self.key.name})"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, KeyEvent):
+            return self.key == other.key and self.char == other.char
+        if isinstance(other, Key):
+            return self.key == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self.key, self.char))
+
+    @property
+    def is_printable(self) -> bool:
+        return self.key is Key.CHAR and len(self.char) == 1
+
+
+# ════════════════════════════════════════════════════════════════════
+#  MENU ITEM (shared by all screens)
+# ════════════════════════════════════════════════════════════════════
+
+class MenuItem:
+    """A single selectable row in a TUI list / menu.
+
+    Attributes
+    ----------
+    label : str
+        Display text.
+    value : str
+        Machine-readable value (key, path, action id, …).
+    checked : bool | None
+        ``None`` → not checkable.  ``True`` / ``False`` → checkbox state.
+    enabled : bool
+        Greyed-out items can be shown but not selected.
+    suffix : str
+        Right-aligned secondary text (size, status, …).
+    """
+
+    __slots__ = ("label", "value", "checked", "enabled", "suffix")
+
+    def __init__(
+        self,
+        label: str,
+        value: str = "",
+        *,
+        checked: bool | None = None,
+        enabled: bool = True,
+        suffix: str = "",
+    ) -> None:
+        self.label = label
+        self.value = value or label
+        self.checked = checked
+        self.enabled = enabled
+        self.suffix = suffix
+
+    def __repr__(self) -> str:
+        chk = ""
+        if self.checked is not None:
+            chk = f" [{'x' if self.checked else ' '}]"
+        return f"MenuItem({self.label!r}{chk})"
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ABSTRACT ENGINE
+# ════════════════════════════════════════════════════════════════════
+
+class Engine(ABC):
+    """Abstract TUI rendering and input engine.
+
+    Concrete implementations must support:
+    - Full-screen clearing and repositioning
+    - Rendering a list of items with a cursor and optional checkboxes
+    - Blocking key input that returns :class:`KeyEvent`
+    - A simple text input prompt (single line)
+    - Status / message bar at the bottom
+    """
+
+    # ── Lifecycle ──
+
+    @abstractmethod
+    def start(self) -> None:
+        """Enter TUI mode (hide cursor, alternate screen, raw mode, …)."""
+
+    @abstractmethod
+    def stop(self) -> None:
+        """Leave TUI mode and restore terminal state."""
+
+    # ── Input ──
+
+    @abstractmethod
+    def get_key(self) -> KeyEvent:
+        """Block until a key is pressed and return the event."""
+
+    @abstractmethod
+    def prompt(self, label: str, prefill: str = "") -> str | None:
+        """Show a one-line text input.  Return typed string or *None* on ESC."""
+
+    @abstractmethod
+    def confirm(self, question: str) -> bool:
+        """Show a y/n prompt.  Return *True* for yes."""
+
+    # ── Rendering ──
+
+    @abstractmethod
+    def clear(self) -> None:
+        """Clear the entire screen."""
+
+    @abstractmethod
+    def get_size(self) -> tuple[int, int]:
+        """Return ``(rows, cols)`` of the terminal."""
+
+    @abstractmethod
+    def draw_header(self, lines: list[str]) -> None:
+        """Draw header lines at the top of the screen."""
+
+    @abstractmethod
+    def draw_items(
+        self,
+        items: list[MenuItem],
+        cursor: int,
+        offset: int,
+        visible_count: int,
+    ) -> None:
+        """Draw a scrollable item list.
+
+        Parameters
+        ----------
+        items
+            Full item list.
+        cursor
+            Index of the currently highlighted item.
+        offset
+            First visible item index (for scrolling).
+        visible_count
+            How many items fit on screen.
+        """
+
+    @abstractmethod
+    def draw_footer(self, lines: list[str]) -> None:
+        """Draw footer / status lines at the bottom."""
+
+    @abstractmethod
+    def draw_text_block(self, text: str) -> None:
+        """Render a multi-line text block (help pages, previews, etc.)."""
+
+    @abstractmethod
+    def show_message(self, msg: str, wait: bool = True) -> None:
+        """Show a temporary message.  If *wait*, block until key press."""
+
+    # ── High-level widgets ──
+
+    def menu_loop(
+        self,
+        title: list[str],
+        items: list[MenuItem],
+        footer: list[str] | None = None,
+        on_select: Callable[[MenuItem, int], bool | None] | None = None,
+        on_check: Callable[[MenuItem, int], None] | None = None,
+        on_key: Callable[[KeyEvent, list[MenuItem], int], int | None] | None = None,
+    ) -> MenuItem | None:
+        """Generic interactive menu loop.
+
+        Parameters
+        ----------
+        title
+            Header lines rendered above the list.
+        items
+            Menu items (may include checkable items).
+        footer
+            Footer / hint lines below the list.
+        on_select
+            Called on ENTER.  Return *True* to exit the loop and return
+            the selected item.  *None* / *False* to stay.
+        on_check
+            Called on SPACE for checkable items.
+        on_key
+            Called for every key event.  May return a new cursor position
+            to override default navigation.  Return *None* to use default.
+
+        Returns
+        -------
+        MenuItem | None
+            The item chosen via ENTER + *on_select* returning *True*,
+            or *None* if the user pressed ESC.
+        """
+        if not items:
+            return None
+
+        cursor: int = 0
+        offset: int = 0
+
+        # Find first enabled item
+        for i, item in enumerate(items):
+            if item.enabled:
+                cursor = i
+                break
+
+        while True:
+            rows, cols = self.get_size()
+            header_count: int = len(title) + 1  # +1 for separator
+            footer_count: int = (len(footer) + 1) if footer else 1
+            visible: int = max(1, rows - header_count - footer_count)
+
+            # Adjust offset to keep cursor visible
+            if cursor < offset:
+                offset = cursor
+            elif cursor >= offset + visible:
+                offset = cursor - visible + 1
+
+            self.clear()
+            self.draw_header(title)
+            self.draw_items(items, cursor, offset, visible)
+            if footer:
+                self.draw_footer(footer)
+
+            ev: KeyEvent = self.get_key()
+
+            # Let caller intercept any key
+            if on_key is not None:
+                new_cur = on_key(ev, items, cursor)
+                if new_cur is not None:
+                    cursor = max(0, min(new_cur, len(items) - 1))
+                    continue
+
+            if ev.key is Key.ESCAPE:
+                return None
+
+            if ev.key is Key.RESIZE:
+                continue
+
+            if ev.key is Key.UP:
+                cursor = self._move_cursor(items, cursor, -1)
+
+            elif ev.key is Key.DOWN:
+                cursor = self._move_cursor(items, cursor, +1)
+
+            elif ev.key is Key.HOME:
+                cursor = self._first_enabled(items)
+
+            elif ev.key is Key.END:
+                cursor = self._last_enabled(items)
+
+            elif ev.key is Key.PAGE_UP:
+                cursor = self._move_cursor(items, cursor, -visible)
+
+            elif ev.key is Key.PAGE_DOWN:
+                cursor = self._move_cursor(items, cursor, +visible)
+
+            elif ev.key is Key.SPACE:
+                item = items[cursor]
+                if item.enabled and item.checked is not None:
+                    item.checked = not item.checked
+                    if on_check is not None:
+                        on_check(item, cursor)
+                    # Auto-advance after toggle
+                    cursor = self._move_cursor(items, cursor, +1)
+
+            elif ev.key is Key.ENTER:
+                item = items[cursor]
+                if item.enabled:
+                    if on_select is not None:
+                        if on_select(item, cursor):
+                            return item
+                    else:
+                        return item
+
+    # ── Cursor helpers ──
+
+    @staticmethod
+    def _move_cursor(items: list[MenuItem], current: int, delta: int) -> int:
+        """Move cursor by *delta*, skipping disabled items."""
+        n: int = len(items)
+        if n == 0:
+            return 0
+        target: int = max(0, min(current + delta, n - 1))
+        # If landed on disabled, search in delta direction
+        step: int = 1 if delta >= 0 else -1
+        while 0 <= target < n and not items[target].enabled:
+            target += step
+        if target < 0 or target >= n:
+            # Reverse search
+            target = current
+        return target
+
+    @staticmethod
+    def _first_enabled(items: list[MenuItem]) -> int:
+        for i, item in enumerate(items):
+            if item.enabled:
+                return i
+        return 0
+
+    @staticmethod
+    def _last_enabled(items: list[MenuItem]) -> int:
+        for i in range(len(items) - 1, -1, -1):
+            if items[i].enabled:
+                return i
+        return len(items) - 1
+└────────────────────────────────────────
+
+┌─── 📄 [16/19] sfc/tui/curses_tui.py
+"""Curses-based TUI engine for POSIX systems (Linux / macOS)."""
+
+from __future__ import annotations
+
+import curses
+import locale
+import os
+
+from .base import Engine, Key, KeyEvent, MenuItem
+
+
+# ── Color pair IDs ──────────────────────────────────────────────────
+
+_CP_NORMAL: int = 0
+_CP_HEADER: int = 1
+_CP_CURSOR: int = 2
+_CP_CHECKED: int = 3
+_CP_DIM: int = 4
+_CP_FOOTER: int = 5
+_CP_ERROR: int = 6
+_CP_INPUT: int = 7
+
+
+def _can_unicode() -> bool:
+    """Check if the terminal likely supports unicode box-drawing + emoji."""
+    enc = locale.getpreferredencoding(False).lower()
+    lang = os.environ.get("LANG", "") + os.environ.get("LC_ALL", "")
+    return "utf" in enc or "utf" in lang.lower()
+
+
+class CursesEngine(Engine):
+    """Concrete TUI engine backed by stdlib ``curses``."""
+
+    def __init__(self) -> None:
+        self._scr: curses.window | None = None
+        self._started: bool = False
+        self._unicode: bool = False
+
+    # ════════════════════════════════════════════════════════════════
+    #  LIFECYCLE
+    # ════════════════════════════════════════════════════════════════
+
+    def start(self) -> None:
+        if self._started:
+            return
+
+        # Set locale BEFORE curses init — critical for wide-char support
+        try:
+            locale.setlocale(locale.LC_ALL, "")
+        except locale.Error:
+            pass
+
+        self._unicode = _can_unicode()
+
+        self._scr = curses.initscr()
+        curses.noecho()
+        curses.cbreak()
+        curses.curs_set(0)
+        self._scr.keypad(True)
+
+        # Minimal delay for escape sequences
+        os.environ.setdefault("ESCDELAY", "25")
+
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(_CP_HEADER, curses.COLOR_CYAN, -1)
+            curses.init_pair(_CP_CURSOR, curses.COLOR_BLACK, curses.COLOR_CYAN)
+            curses.init_pair(_CP_CHECKED, curses.COLOR_GREEN, -1)
+            curses.init_pair(_CP_DIM, curses.COLOR_WHITE, -1)
+            curses.init_pair(_CP_FOOTER, curses.COLOR_YELLOW, -1)
+            curses.init_pair(_CP_ERROR, curses.COLOR_RED, -1)
+            curses.init_pair(_CP_INPUT, curses.COLOR_WHITE, curses.COLOR_BLUE)
+
+        self._started = True
+
+    def stop(self) -> None:
+        if not self._started:
+            return
+        self._started = False
+        if self._scr is not None:
+            try:
+                self._scr.keypad(False)
+            except curses.error:
+                pass
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
+        try:
+            curses.nocbreak()
+        except curses.error:
+            pass
+        try:
+            curses.echo()
+        except curses.error:
+            pass
+        try:
+            curses.endwin()
+        except curses.error:
+            pass
+
+    # ════════════════════════════════════════════════════════════════
+    #  SAFE STRING HELPERS
+    # ════════════════════════════════════════════════════════════════
+
+    def _safe_addstr(
+        self,
+        row: int,
+        col: int,
+        text: str,
+        attr: int = 0,
+    ) -> None:
+        """Write string, stripping problematic characters if needed."""
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        if row < 0 or row >= rows or col < 0 or col >= cols:
+            return
+
+        # Truncate to available width
+        max_len = cols - col - 1
+        if max_len <= 0:
+            return
+        text = text[:max_len]
+
+        try:
+            self._scr.addstr(row, col, text, attr)
+        except curses.error:
+            # Fallback: strip non-ASCII characters and retry
+            cleaned = self._ascii_fallback(text)
+            try:
+                self._scr.addstr(row, col, cleaned[:max_len], attr)
+            except curses.error:
+                pass
+
+    def _ascii_fallback(self, text: str) -> str:
+        """Replace emoji and box-drawing chars with ASCII equivalents."""
+        _MAP = {
+            "📂": "[D]", "📄": "[F]", "📦": "[P]", "📋": "[=]",
+            "📅": "[d]", "🔧": "[*]", "🔍": "[?]", "📝": "[>]",
+            "🔖": "[B]", "🗂️": "[T]", "⚙️": "[S]", "📖": "[H]",
+            "🔄": "[U]", "✅": "[v]", "👁️": "[E]", "🗑️": "[X]",
+            "❌": "[x]", "➕": "[+]", "↩": "<-", "💾": "[s]",
+            "🗑": "[X]", "📤": "[^]", "🚫": "[!]",
+            "━": "=", "─": "-", "│": "|", "┌": "+", "┐": "+",
+            "└": "+", "┘": "+", "├": "+", "┤": "+",
+            "▸": ">", "▲": "^", "▼": "v",
+            "✓": "x", "✗": "-",
+        }
+        for k, v in _MAP.items():
+            text = text.replace(k, v)
+        # Strip remaining non-ASCII if still problematic
+        return text.encode("ascii", errors="replace").decode("ascii")
+
+    # ════════════════════════════════════════════════════════════════
+    #  INPUT
+    # ════════════════════════════════════════════════════════════════
+
+    def get_key(self) -> KeyEvent:
+        assert self._scr is not None
+        try:
+            ch = self._scr.get_wch()
+        except curses.error:
+            return KeyEvent(Key.UNKNOWN)
+        except KeyboardInterrupt:
+            return KeyEvent(Key.ESCAPE)
+
+        if isinstance(ch, str):
+            if len(ch) == 1:
+                o: int = ord(ch)
+                if o == 27:
+                    return KeyEvent(Key.ESCAPE)
+                if o in (10, 13):
+                    return KeyEvent(Key.ENTER)
+                if o == 32:
+                    return KeyEvent(Key.SPACE)
+                if o == 9:
+                    return KeyEvent(Key.TAB)
+                if o in (127, 8):
+                    return KeyEvent(Key.BACKSPACE)
+                if 32 <= o < 127 or o > 127:
+                    return KeyEvent(Key.CHAR, ch)
+            return KeyEvent(Key.CHAR, ch)
+
+        return self._map_special(ch)
+
+    def _map_special(self, ch: int) -> KeyEvent:
+        _MAP: dict[int, Key] = {
+            curses.KEY_UP: Key.UP,
+            curses.KEY_DOWN: Key.DOWN,
+            curses.KEY_LEFT: Key.LEFT,
+            curses.KEY_RIGHT: Key.RIGHT,
+            curses.KEY_ENTER: Key.ENTER,
+            10: Key.ENTER,
+            13: Key.ENTER,
+            curses.KEY_BACKSPACE: Key.BACKSPACE,
+            127: Key.BACKSPACE,
+            8: Key.BACKSPACE,
+            curses.KEY_HOME: Key.HOME,
+            curses.KEY_END: Key.END,
+            curses.KEY_PPAGE: Key.PAGE_UP,
+            curses.KEY_NPAGE: Key.PAGE_DOWN,
+            curses.KEY_DC: Key.DELETE,
+            curses.KEY_RESIZE: Key.RESIZE,
+            27: Key.ESCAPE,
+        }
+        key = _MAP.get(ch, Key.UNKNOWN)
+        if key is Key.UNKNOWN and 32 <= ch < 127:
+            return KeyEvent(Key.CHAR, chr(ch))
+        return KeyEvent(key)
+
+    def prompt(self, label: str, prefill: str = "") -> str | None:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        prompt_row: int = rows - 2
+
+        curses.curs_set(1)
+
+        buf: list[str] = list(prefill)
+
+        while True:
+            display: str = "".join(buf)
+            max_d: int = cols - len(label) - 3
+            if len(display) > max_d:
+                display = display[-max_d:]
+
+            self._safe_addstr(prompt_row, 0, " " * (cols - 1))
+            self._safe_addstr(prompt_row, 1, label, curses.color_pair(_CP_FOOTER))
+            self._safe_addstr(prompt_row, len(label) + 1, display)
+
+            cursor_x: int = min(len(label) + 1 + len(display), cols - 1)
+            try:
+                self._scr.move(prompt_row, cursor_x)
+            except curses.error:
+                pass
+            self._scr.refresh()
+
+            try:
+                ch = self._scr.get_wch()
+            except curses.error:
+                continue
+            except KeyboardInterrupt:
+                curses.curs_set(0)
+                return None
+
+            if isinstance(ch, str):
+                o = ord(ch) if len(ch) == 1 else 0
+                if o == 27:
+                    curses.curs_set(0)
+                    return None
+                if o in (10, 13):
+                    curses.curs_set(0)
+                    return "".join(buf)
+                if o in (8, 127):
+                    if buf:
+                        buf.pop()
+                else:
+                    buf.append(ch)
+            elif isinstance(ch, int):
+                if ch == curses.KEY_BACKSPACE:
+                    if buf:
+                        buf.pop()
+                elif ch in (curses.KEY_ENTER, 10, 13):
+                    curses.curs_set(0)
+                    return "".join(buf)
+                elif ch == 27:
+                    curses.curs_set(0)
+                    return None
+
+    def confirm(self, question: str) -> bool:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        prompt_row = rows - 2
+        full = f"{question} (y/n): "
+        self._safe_addstr(prompt_row, 0, " " * (cols - 1))
+        self._safe_addstr(prompt_row, 1, full, curses.color_pair(_CP_FOOTER))
+        self._scr.refresh()
+
+        while True:
+            ev = self.get_key()
+            if ev.key is Key.CHAR and ev.char.lower() in ("y", "n"):
+                return ev.char.lower() == "y"
+            if ev.key is Key.ENTER:
+                return False
+            if ev.key is Key.ESCAPE:
+                return False
+
+    # ════════════════════════════════════════════════════════════════
+    #  RENDERING
+    # ════════════════════════════════════════════════════════════════
+
+    def clear(self) -> None:
+        assert self._scr is not None
+        self._scr.erase()
+
+    def get_size(self) -> tuple[int, int]:
+        assert self._scr is not None
+        return self._scr.getmaxyx()
+
+    def draw_header(self, lines: list[str]) -> None:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        attr = curses.color_pair(_CP_HEADER) | curses.A_BOLD
+        for i, line in enumerate(lines):
+            if i >= rows - 2:
+                break
+            self._safe_addstr(i, 0, line, attr)
+        sep_row = len(lines)
+        if sep_row < rows - 1:
+            sep = "-" * min(cols - 1, 60)
+            self._safe_addstr(sep_row, 0, sep, curses.color_pair(_CP_DIM))
+        self._scr.refresh()
+
+    def draw_items(
+        self,
+        items: list[MenuItem],
+        cursor: int,
+        offset: int,
+        visible_count: int,
+    ) -> None:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        # Start items right after the header separator
+        start_row: int = self._get_item_start_row()
+
+        for vi in range(visible_count):
+            idx: int = offset + vi
+            row: int = start_row + vi
+            if row >= rows - 2:
+                break
+            if idx >= len(items):
+                break
+
+            item: MenuItem = items[idx]
+            is_cur: bool = idx == cursor
+
+            prefix: str
+            if item.checked is not None:
+                mark: str = "x" if item.checked else " "
+                prefix = f" [{mark}] "
+            else:
+                prefix = "  "
+
+            if is_cur:
+                prefix = " >" + prefix[2:]
+
+            label: str = item.label
+            suffix: str = f"  {item.suffix}" if item.suffix else ""
+
+            max_label: int = cols - len(prefix) - len(suffix) - 2
+            if max_label > 0 and len(label) > max_label:
+                label = label[:max_label - 1] + "~"
+
+            line: str = f"{prefix}{label}{suffix}"
+
+            if is_cur:
+                attr = curses.color_pair(_CP_CURSOR) | curses.A_BOLD
+            elif not item.enabled:
+                attr = curses.color_pair(_CP_DIM) | curses.A_DIM
+            elif item.checked:
+                attr = curses.color_pair(_CP_CHECKED)
+            else:
+                attr = curses.color_pair(_CP_NORMAL)
+
+            # Clear row first
+            self._safe_addstr(row, 0, " " * (cols - 1), curses.color_pair(_CP_NORMAL))
+            self._safe_addstr(row, 0, line, attr)
+
+        # Scroll indicators (ASCII safe)
+        if offset > 0:
+            self._safe_addstr(start_row, cols - 2, "^", curses.color_pair(_CP_DIM))
+        if offset + visible_count < len(items):
+            last_vis = start_row + min(visible_count, len(items) - offset) - 1
+            if last_vis < rows - 2:
+                self._safe_addstr(last_vis, cols - 2, "v", curses.color_pair(_CP_DIM))
+
+        self._scr.refresh()
+
+    def draw_footer(self, lines: list[str]) -> None:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        for i, line in enumerate(lines):
+            row = rows - len(lines) + i
+            if row < 0:
+                continue
+            self._safe_addstr(row, 0, " " * (cols - 1))
+            self._safe_addstr(row, 1, line, curses.color_pair(_CP_FOOTER))
+        self._scr.refresh()
+
+    def draw_text_block(self, text: str) -> None:
+        assert self._scr is not None
+        text_lines: list[str] = text.split("\n")
+        offset: int = 0
+
+        while True:
+            rows, cols = self._scr.getmaxyx()
+            self._scr.erase()
+            visible = rows - 2
+
+            for i in range(visible):
+                li = offset + i
+                if li >= len(text_lines):
+                    break
+                self._safe_addstr(i, 0, text_lines[li], curses.color_pair(_CP_NORMAL))
+
+            total_pages = max(1, (len(text_lines) + visible - 1) // visible)
+            cur_page = (offset // visible) + 1 if visible > 0 else 1
+            hint = f" Up/Down:scroll  q/ESC:back  ({cur_page}/{total_pages})"
+            self._safe_addstr(rows - 1, 0, hint, curses.color_pair(_CP_FOOTER))
+            self._scr.refresh()
+
+            ev = self.get_key()
+            if ev.key is Key.ESCAPE or (ev.key is Key.CHAR and ev.char in ("q", "Q")):
+                return
+            if ev.key is Key.UP:
+                offset = max(0, offset - 1)
+            elif ev.key is Key.DOWN:
+                offset = min(max(0, len(text_lines) - visible), offset + 1)
+            elif ev.key is Key.PAGE_UP:
+                offset = max(0, offset - visible)
+            elif ev.key is Key.PAGE_DOWN:
+                offset = min(max(0, len(text_lines) - visible), offset + visible)
+            elif ev.key is Key.HOME:
+                offset = 0
+            elif ev.key is Key.END:
+                offset = max(0, len(text_lines) - visible)
+            elif ev.key is Key.RESIZE:
+                continue
+
+    def show_message(self, msg: str, wait: bool = True) -> None:
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        lines = msg.split("\n")
+        start_row = max(0, (rows - len(lines)) // 2)
+        self._scr.erase()
+        attr = curses.color_pair(_CP_HEADER) | curses.A_BOLD
+        for i, line in enumerate(lines):
+            r = start_row + i
+            if r >= rows:
+                break
+            x = max(0, (cols - len(line)) // 2)
+            self._safe_addstr(r, x, line, attr)
+        if wait:
+            self._safe_addstr(rows - 1, 1, "Press any key...", curses.color_pair(_CP_DIM))
+        self._scr.refresh()
+        if wait:
+            self.get_key()
+
+    # ════════════════════════════════════════════════════════════════
+    #  INTERNAL
+    # ════════════════════════════════════════════════════════════════
+
+    def _get_item_start_row(self) -> int:
+        """Header lines + 1 separator.  Scan to find it reliably."""
+        assert self._scr is not None
+        rows, cols = self._scr.getmaxyx()
+        for r in range(min(10, rows)):
+            try:
+                raw = self._scr.instr(r, 0, min(3, cols))
+                # The separator is drawn as ASCII "-" now
+                if raw.startswith(b"-") or raw.startswith(b"="):
+                    return r + 1
+            except curses.error:
+                continue
+        return 4
+└────────────────────────────────────────
+
+┌─── 📄 [17/19] sfc/tui/win_tui.py
+"""Windows TUI engine using msvcrt + ctypes Console API.
+
+Provides the same interface as :class:`CursesEngine` but works natively
+on Windows without curses (which is not bundled on Windows Python).
+
+Uses:
+- ``msvcrt.getwch()`` for keyboard input
+- ``ctypes`` calls to ``kernel32`` for console buffer manipulation
+- Direct ``sys.stdout.write`` with ANSI escapes (Windows 10+ supports
+  Virtual Terminal Sequences when enabled).
+"""
+
+from __future__ import annotations
+
+import ctypes
+import ctypes.wintypes
+import msvcrt
+import os
+import sys
+from typing import TYPE_CHECKING
+
+from .base import Engine, Key, KeyEvent, MenuItem
+
+if TYPE_CHECKING:
+    pass
+
+
+# ── Win32 constants ─────────────────────────────────────────────────
+
+_ENABLE_VIRTUAL_TERMINAL_PROCESSING: int = 0x0004
+_ENABLE_PROCESSED_OUTPUT: int = 0x0001
+_STD_OUTPUT_HANDLE: int = -11
+_STD_INPUT_HANDLE: int = -10
+
+_kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+
+def _enable_ansi() -> None:
+    """Enable ANSI/VT100 escape sequences on Windows 10+."""
+    handle = _kernel32.GetStdHandle(_STD_OUTPUT_HANDLE)
+    mode = ctypes.wintypes.DWORD()
+    _kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+    _kernel32.SetConsoleMode(
+        handle, mode.value | _ENABLE_VIRTUAL_TERMINAL_PROCESSING | _ENABLE_PROCESSED_OUTPUT,
+    )
+
+
+# ── ANSI helpers ────────────────────────────────────────────────────
+
+_ESC: str = "\033["
+
+_RESET: str = f"{_ESC}0m"
+_BOLD: str = f"{_ESC}1m"
+_DIM: str = f"{_ESC}2m"
+_FG_CYAN: str = f"{_ESC}36m"
+_FG_GREEN: str = f"{_ESC}32m"
+_FG_YELLOW: str = f"{_ESC}33m"
+_FG_RED: str = f"{_ESC}31m"
+_FG_WHITE: str = f"{_ESC}37m"
+_BG_CYAN: str = f"{_ESC}46m"
+_FG_BLACK: str = f"{_ESC}30m"
+_CLEAR_SCREEN: str = f"{_ESC}2J{_ESC}H"
+_HIDE_CURSOR: str = f"{_ESC}?25l"
+_SHOW_CURSOR: str = f"{_ESC}?25h"
+_CLEAR_LINE: str = f"{_ESC}2K"
+
+
+def _move(row: int, col: int) -> str:
+    return f"{_ESC}{row + 1};{col + 1}H"
+
+
+class WinEngine(Engine):
+    """Concrete TUI engine for Windows using msvcrt + ANSI escapes."""
+
+    def __init__(self) -> None:
+        self._started: bool = False
+
+    # ════════════════════════════════════════════════════════════════
+    #  LIFECYCLE
+    # ════════════════════════════════════════════════════════════════
+
+    def start(self) -> None:
+        if self._started:
+            return
+        _enable_ansi()
+        self._write(_HIDE_CURSOR)
+        self._started = True
+
+    def stop(self) -> None:
+        if not self._started:
+            return
+        self._write(_SHOW_CURSOR + _RESET)
+        self._started = False
+
+    # ════════════════════════════════════════════════════════════════
+    #  INPUT
+    # ════════════════════════════════════════════════════════════════
+
+    def get_key(self) -> KeyEvent:
+        try:
+            ch: str = msvcrt.getwch()
+        except KeyboardInterrupt:
+            return KeyEvent(Key.ESCAPE)
+
+        # Special keys: first char is \x00 or \xe0
+        if ch in ("\x00", "\xe0"):
+            try:
+                ext: str = msvcrt.getwch()
+            except KeyboardInterrupt:
+                return KeyEvent(Key.ESCAPE)
+            return self._map_extended(ext)
+
+        o: int = ord(ch)
+        if o == 27:
+            return KeyEvent(Key.ESCAPE)
+        if o == 13:
+            return KeyEvent(Key.ENTER)
+        if o == 32:
+            return KeyEvent(Key.SPACE)
+        if o == 9:
+            return KeyEvent(Key.TAB)
+        if o == 8:
+            return KeyEvent(Key.BACKSPACE)
+        if 32 <= o < 127 or o > 127:
+            return KeyEvent(Key.CHAR, ch)
+        return KeyEvent(Key.UNKNOWN)
+
+    @staticmethod
+    def _map_extended(ch: str) -> KeyEvent:
+        _MAP: dict[str, Key] = {
+            "H": Key.UP,
+            "P": Key.DOWN,
+            "K": Key.LEFT,
+            "M": Key.RIGHT,
+            "G": Key.HOME,
+            "O": Key.END,
+            "I": Key.PAGE_UP,
+            "Q": Key.PAGE_DOWN,
+            "S": Key.DELETE,
+        }
+        key = _MAP.get(ch, Key.UNKNOWN)
+        return KeyEvent(key)
+
+    def prompt(self, label: str, prefill: str = "") -> str | None:
+        rows, cols = self.get_size()
+        prompt_row: int = rows - 2
+        buf: list[str] = list(prefill)
+
+        self._write(_SHOW_CURSOR)
+
+        while True:
+            # Draw prompt line
+            display: str = "".join(buf)
+            max_d: int = cols - len(label) - 3
+            if len(display) > max_d:
+                display = display[-max_d:]
+            line: str = f"{_FG_YELLOW}{label}{_RESET}{display}"
+            self._write(
+                _move(prompt_row, 0) + _CLEAR_LINE + " " + line
+            )
+
+            ev = self.get_key()
+            if ev.key is Key.ESCAPE:
+                self._write(_HIDE_CURSOR)
+                return None
+            if ev.key is Key.ENTER:
+                self._write(_HIDE_CURSOR)
+                return "".join(buf)
+            if ev.key is Key.BACKSPACE:
+                if buf:
+                    buf.pop()
+            elif ev.is_printable:
+                buf.append(ev.char)
+
+    def confirm(self, question: str) -> bool:
+        rows, cols = self.get_size()
+        prompt_row = rows - 2
+        full = f"{question} (y/n): "
+        self._write(
+            _move(prompt_row, 0) + _CLEAR_LINE + f" {_FG_YELLOW}{full}{_RESET}"
+        )
+        while True:
+            ev = self.get_key()
+            if ev.key is Key.CHAR and ev.char.lower() in ("y", "n", "д", "н"):
+                return ev.char.lower() in ("y", "д")
+            if ev.key in (Key.ENTER, Key.ESCAPE):
+                return False
+
+    # ════════════════════════════════════════════════════════════════
+    #  RENDERING
+    # ════════════════════════════════════════════════════════════════
+
+    def clear(self) -> None:
+        self._write(_CLEAR_SCREEN)
+
+    def get_size(self) -> tuple[int, int]:
+        try:
+            ts = os.get_terminal_size()
+            return (ts.lines, ts.columns)
+        except OSError:
+            return (25, 80)
+
+    def draw_header(self, lines: list[str]) -> None:
+        rows, cols = self.get_size()
+        out: list[str] = []
+        for i, line in enumerate(lines):
+            if i >= rows - 2:
+                break
+            out.append(
+                _move(i, 0) + _CLEAR_LINE + f"{_BOLD}{_FG_CYAN}{line[:cols - 1]}{_RESET}"
+            )
+        # Separator
+        sep_row = len(lines)
+        if sep_row < rows - 1:
+            sep = "─" * min(cols - 1, 60)
+            out.append(_move(sep_row, 0) + _CLEAR_LINE + f"{_DIM}{sep}{_RESET}")
+        self._write("".join(out))
+
+    def draw_items(
+        self,
+        items: list[MenuItem],
+        cursor: int,
+        offset: int,
+        visible_count: int,
+    ) -> None:
+        rows, cols = self.get_size()
+        start_row: int = self._find_item_start_row_win()
+        out: list[str] = []
+
+        for vi in range(visible_count):
+            idx: int = offset + vi
+            row: int = start_row + vi
+            if row >= rows - 2:
+                break
+            if idx >= len(items):
+                # Clear remaining visible rows
+                out.append(_move(row, 0) + _CLEAR_LINE)
+                continue
+
+            item: MenuItem = items[idx]
+            is_cur: bool = idx == cursor
+
+            prefix: str
+            if item.checked is not None:
+                mark: str = "✓" if item.checked else " "
+                prefix = f" [{mark}] "
+            else:
+                prefix = "  "
+
+            if is_cur:
+                prefix = " ▸" + prefix[2:]
+
+            label: str = item.label
+            suffix: str = f"  {item.suffix}" if item.suffix else ""
+
+            max_label: int = cols - len(prefix) - len(suffix) - 2
+            if len(label) > max_label:
+                label = label[:max(0, max_label - 1)] + "…"
+
+            line: str = f"{prefix}{label}{suffix}"
+            line = line[:cols - 1]
+
+            if is_cur:
+                styled = f"{_BG_CYAN}{_FG_BLACK}{_BOLD}{line}{_RESET}"
+            elif not item.enabled:
+                styled = f"{_DIM}{line}{_RESET}"
+            elif item.checked:
+                styled = f"{_FG_GREEN}{line}{_RESET}"
+            else:
+                styled = line
+
+            out.append(_move(row, 0) + _CLEAR_LINE + styled)
+
+        # Scroll indicators
+        if offset > 0:
+            out.append(_move(start_row, cols - 2) + f"{_DIM}▲{_RESET}")
+        if offset + visible_count < len(items):
+            last_row = start_row + min(visible_count, len(items) - offset) - 1
+            if last_row < rows - 2:
+                out.append(_move(last_row, cols - 2) + f"{_DIM}▼{_RESET}")
+
+        self._write("".join(out))
+
+    def draw_footer(self, lines: list[str]) -> None:
+        rows, cols = self.get_size()
+        out: list[str] = []
+        for i, line in enumerate(lines):
+            row = rows - len(lines) + i
+            if row < 0:
+                continue
+            out.append(
+                _move(row, 0) + _CLEAR_LINE + f" {_FG_YELLOW}{line[:cols - 2]}{_RESET}"
+            )
+        self._write("".join(out))
+
+    def draw_text_block(self, text: str) -> None:
+        text_lines: list[str] = text.split("\n")
+        offset: int = 0
+
+        while True:
+            rows, cols = self.get_size()
+            visible = rows - 2
+            out: list[str] = [_CLEAR_SCREEN]
+
+            for i in range(visible):
+                li = offset + i
+                if li >= len(text_lines):
+                    break
+                line = text_lines[li][:cols - 1]
+                out.append(_move(i, 0) + line)
+
+            total_pages = max(1, (len(text_lines) + visible - 1) // visible)
+            cur_page = (offset // visible) + 1 if visible > 0 else 1
+            hint = f" ↑↓:scroll  q/ESC:back  ({cur_page}/{total_pages})"
+            out.append(_move(rows - 1, 0) + f"{_FG_YELLOW}{hint[:cols - 1]}{_RESET}")
+            self._write("".join(out))
+
+            ev = self.get_key()
+            if ev.key is Key.ESCAPE or (ev.key is Key.CHAR and ev.char in ("q", "Q")):
+                return
+            if ev.key is Key.UP:
+                offset = max(0, offset - 1)
+            elif ev.key is Key.DOWN:
+                offset = min(max(0, len(text_lines) - visible), offset + 1)
+            elif ev.key is Key.PAGE_UP:
+                offset = max(0, offset - visible)
+            elif ev.key is Key.PAGE_DOWN:
+                offset = min(max(0, len(text_lines) - visible), offset + visible)
+            elif ev.key is Key.HOME:
+                offset = 0
+            elif ev.key is Key.END:
+                offset = max(0, len(text_lines) - visible)
+
+    def show_message(self, msg: str, wait: bool = True) -> None:
+        rows, cols = self.get_size()
+        lines = msg.split("\n")
+        start_row = max(0, (rows - len(lines)) // 2)
+        out: list[str] = [_CLEAR_SCREEN]
+        for i, line in enumerate(lines):
+            r = start_row + i
+            if r >= rows:
+                break
+            x = max(0, (cols - len(line)) // 2)
+            out.append(_move(r, x) + f"{_BOLD}{_FG_CYAN}{line[:cols - 1]}{_RESET}")
+        if wait:
+            out.append(_move(rows - 1, 1) + f"{_DIM}Press any key...{_RESET}")
+        self._write("".join(out))
+        if wait:
+            self.get_key()
+
+    # ════════════════════════════════════════════════════════════════
+    #  INTERNAL HELPERS
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _write(s: str) -> None:
+        sys.stdout.write(s)
+        sys.stdout.flush()
+
+    @staticmethod
+    def _find_item_start_row_win() -> int:
+        """Header is typically 3–4 lines + 1 separator."""
+        return 4
+└────────────────────────────────────────
+
+┌─── 📄 [18/19] sfc/updater.py
+"""Self-updater: check remote version, download, overwrite, prompt restart.
+
+Downloads the raw ``sfc/version.py`` from GitHub to parse the remote version,
+then fetches the full single-file or package as needed.
+
+Works with both:
+  - Running as a .py / .pyz (``__file__`` points to a real file)
+  - Running as a frozen zipapp (overwrite the archive)
+
+No third-party dependencies — uses only ``urllib``.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import stat
+import sys
+import tempfile
+from pathlib import Path
+from typing import NamedTuple
+from urllib.error import URLError
+from urllib.request import Request, urlopen
+
+from .version import GITHUB_RAW_BASE, VERSION
+
+
+# ── Public types ────────────────────────────────────────────────────
+
+class UpdateCheckResult(NamedTuple):
+    """Outcome of a version check."""
+    available: bool       # True if a newer version exists
+    remote_version: str   # version string from remote, or "" on error
+    current_version: str  # local VERSION
+    error: str            # human-readable error, or ""
+
+
+class UpdateApplyResult(NamedTuple):
+    """Outcome of an apply attempt."""
+    ok: bool
+    message: str
+
+
+# ── Internals ───────────────────────────────────────────────────────
+
+_TIMEOUT: int = 10
+_VERSION_URL: str = f"{GITHUB_RAW_BASE}/sfc/version.py"
+_MAIN_URL: str = f"{GITHUB_RAW_BASE}/sfc/__main__.py"
+
+# For single-file download (future-proof: if we ever ship sfc.py again)
+_SINGLE_FILE_URL: str = f"{GITHUB_RAW_BASE}/sfc.py"
+
+# Module files that make up the package — fetched for zipapp overwrite
+_PACKAGE_FILES: list[str] = [
+    "__init__.py",
+    "__main__.py",
+    "version.py",
+    "patterns.py",
+    "config.py",
+    "collector.py",
+    "clipboard.py",
+    "updater.py",
+    "app.py",
+    "tui/__init__.py",
+    "tui/base.py",
+    "tui/curses_tui.py",
+    "tui/win_tui.py",
+]
+
+
+def _fetch(url: str) -> bytes:
+    """Fetch URL contents.  Raises on failure."""
+    req = Request(url, headers={"User-Agent": "sfc-updater"})
+    with urlopen(req, timeout=_TIMEOUT) as resp:
+        return resp.read()
+
+
+def _parse_remote_version(raw: bytes) -> str:
+    """Extract VERSION = "x.y.z" from raw version.py bytes."""
+    text: str = raw.decode("utf-8", errors="replace")
+    match = re.search(r'VERSION\s*[=:]\s*["\']([^"\']+)["\']', text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """``"3.1.2"`` → ``(3, 1, 2)``.  Non-numeric parts become 0."""
+    parts: list[int] = []
+    for segment in v.split("."):
+        try:
+            parts.append(int(segment))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+def _is_newer(remote: str, local: str) -> bool:
+    """Return True if *remote* version is strictly greater than *local*."""
+    return _version_tuple(remote) > _version_tuple(local)
+
+
+def _executable_path() -> Path:
+    """Best guess at the currently running script / archive path."""
+    # sys.argv[0] is usually the most reliable for "what was invoked"
+    candidate = Path(sys.argv[0]).resolve()
+    if candidate.exists():
+        return candidate
+    # Fallback: __main__'s __file__
+    main_mod = sys.modules.get("__main__")
+    if main_mod and hasattr(main_mod, "__file__") and main_mod.__file__:
+        candidate = Path(main_mod.__file__).resolve()
+        if candidate.exists():
+            return candidate
+    return Path(__file__).resolve()
+
+
+def _is_writable(p: Path) -> bool:
+    """Check if we can write to *p* (or its parent if *p* doesn't exist)."""
+    if p.exists():
+        return os.access(p, os.W_OK)
+    return os.access(p.parent, os.W_OK)
+
+
+# ── Public API ──────────────────────────────────────────────────────
+
+def check_update() -> UpdateCheckResult:
+    """Check GitHub for a newer version.  Network errors are caught."""
+    try:
+        raw: bytes = _fetch(_VERSION_URL)
+    except (URLError, OSError, TimeoutError) as exc:
+        return UpdateCheckResult(
+            available=False,
+            remote_version="",
+            current_version=VERSION,
+            error=f"network error: {exc}",
+        )
+
+    remote: str = _parse_remote_version(raw)
+    if not remote:
+        return UpdateCheckResult(
+            available=False,
+            remote_version="",
+            current_version=VERSION,
+            error="could not parse remote version",
+        )
+
+    return UpdateCheckResult(
+        available=_is_newer(remote, VERSION),
+        remote_version=remote,
+        current_version=VERSION,
+        error="",
+    )
+
+
+def apply_update() -> UpdateApplyResult:
+    """Download the latest version and overwrite the current executable.
+
+    Strategy
+    --------
+    1. Determine the path of the running script/archive.
+    2. Download the new file(s) to a temp location.
+    3. Atomically replace (write temp → rename over original).
+    4. Return success + "please restart" message.
+
+    For a **directory package** (``python -m sfc``), each module file is
+    overwritten individually.  For a **zipapp** (``.pyz``), a new archive
+    is built.  For a **single file** (``sfc.py``), the file is replaced.
+    """
+    exe: Path = _executable_path()
+
+    if not _is_writable(exe):
+        return UpdateApplyResult(
+            ok=False,
+            message=f"no write permission: {exe}",
+        )
+
+    # ── Detect mode: single file vs package dir vs zipapp ──
+    # If exe is inside a directory with version.py, it's a package run
+    package_dir: Path | None = None
+    if exe.parent.name == "sfc" and (exe.parent / "version.py").exists():
+        package_dir = exe.parent
+    elif exe.suffix == ".pyz":
+        # Zipapp — for now, we download individual files and rebuild
+        package_dir = None  # handled separately below
+
+    try:
+        if package_dir is not None:
+            # ── Package mode: overwrite individual files ──
+            for rel in _PACKAGE_FILES:
+                url: str = f"{GITHUB_RAW_BASE}/sfc/{rel}"
+                target: Path = package_dir / rel
+                try:
+                    data: bytes = _fetch(url)
+                except (URLError, OSError):
+                    continue  # skip files that don't exist upstream yet
+                target.parent.mkdir(parents=True, exist_ok=True)
+                _atomic_write(target, data)
+
+            return UpdateApplyResult(
+                ok=True,
+                message="updated package files — please restart sfc",
+            )
+
+        else:
+            # ── Single file or zipapp mode ──
+            # Try single-file first, fall back to __main__.py
+            data = b""
+            for url in (_SINGLE_FILE_URL, _MAIN_URL):
+                try:
+                    data = _fetch(url)
+                    break
+                except (URLError, OSError):
+                    continue
+
+            if not data:
+                return UpdateApplyResult(
+                    ok=False,
+                    message="failed to download update from GitHub",
+                )
+
+            _atomic_write(exe, data)
+
+            # Preserve executable bit on POSIX
+            if os.name != "nt":
+                exe.chmod(
+                    exe.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH,
+                )
+
+            return UpdateApplyResult(
+                ok=True,
+                message=f"updated {exe.name} — please restart sfc",
+            )
+
+    except Exception as exc:
+        return UpdateApplyResult(ok=False, message=f"update failed: {exc}")
+
+
+def _atomic_write(target: Path, data: bytes) -> None:
+    """Write *data* to a temp file then rename over *target*.
+
+    On Windows ``os.replace`` can fail if the file is locked; in that case
+    we fall back to direct write.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    fd, tmp_path_str = tempfile.mkstemp(
+        dir=str(target.parent),
+        prefix=f".{target.stem}_",
+        suffix=".tmp",
+    )
+    tmp_path = Path(tmp_path_str)
+    try:
+        os.write(fd, data)
+        os.close(fd)
+        fd = -1  # sentinel: closed
+
+        # Atomic rename
+        try:
+            os.replace(str(tmp_path), str(target))
+        except OSError:
+            # Windows fallback: direct overwrite
+            target.write_bytes(data)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+    finally:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        # Cleanup temp on any error path
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+└────────────────────────────────────────
+
+┌─── 📄 [19/19] sfc/version.py
+"""Single source of truth for version and application metadata."""
+
+from __future__ import annotations
+
+VERSION: str = "3.0.0"
+APP_NAME: str = "sfc"
+APP_TITLE: str = "Smart File Collector"
+GITHUB_REPO: str = "Heysh1n/Speecher-py"
+GITHUB_RAW_BASE: str = f"https://raw.githubusercontent.com/{GITHUB_REPO}/master"
+└────────────────────────────────────────
+
+═════
+✅ End
+═════

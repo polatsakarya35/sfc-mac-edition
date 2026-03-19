@@ -88,20 +88,38 @@ def get_all_files(
     root = root.resolve()
     result: list[Path] = []
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        # Prune ignored directories in-place (also sorts for determinism)
-        dirnames[:] = sorted(d for d in dirnames if d not in ignore_dirs)
+    def _scan_dir(dir_path: Path) -> None:
+        try:
+            with os.scandir(dir_path) as it:
+                entries = list(it)
+        except OSError:
+            return
 
-        for fn in sorted(filenames):
-            if fn in ignore_files:
+        dirs: list[os.DirEntry[str]] = []
+        files: list[os.DirEntry[str]] = []
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    if entry.name not in ignore_dirs:
+                        dirs.append(entry)
+                elif entry.is_file(follow_symlinks=False):
+                    files.append(entry)
+            except OSError:
                 continue
-            if _is_self_file(fn):
+
+        for entry in sorted(files, key=lambda e: e.name.lower()):
+            fn = entry.name
+            if fn in ignore_files or _is_self_file(fn):
                 continue
-            fp = Path(dirpath) / fn
+            fp = Path(entry.path)
             if fp.suffix.lower() in ignore_ext:
                 continue
             result.append(fp)
 
+        for entry in sorted(dirs, key=lambda e: e.name.lower()):
+            _scan_dir(Path(entry.path))
+
+    _scan_dir(root)
     return result
 
 

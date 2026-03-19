@@ -16,6 +16,9 @@ import subprocess
 import sys
 from typing import NamedTuple
 
+_DEFAULT_TIMEOUT_SEC: int = 5
+_MACOS_TIMEOUT_SEC: int = 20
+
 
 class ClipboardResult(NamedTuple):
     """Outcome of a clipboard copy attempt."""
@@ -34,7 +37,7 @@ def _is_x11() -> bool:
     return bool(os.environ.get("DISPLAY"))
 
 
-def _run(cmd: list[str], data: bytes) -> bool:
+def _run(cmd: list[str], data: bytes, timeout_sec: int = _DEFAULT_TIMEOUT_SEC) -> bool:
     """Run *cmd*, pipe *data* to stdin, return success bool."""
     try:
         proc = subprocess.run(
@@ -42,18 +45,57 @@ def _run(cmd: list[str], data: bytes) -> bool:
             input=data,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=5,
+            timeout=timeout_sec,
         )
         return proc.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
 
 
-def _try_tool(tool: str, args: list[str], data: bytes) -> bool:
+def _try_tool(
+    tool: str,
+    args: list[str],
+    data: bytes,
+    timeout_sec: int = _DEFAULT_TIMEOUT_SEC,
+) -> bool:
     """Check if *tool* exists on PATH, then run with *args*."""
     if shutil.which(tool) is None:
         return False
-    return _run([tool] + args, data)
+    return _run([tool] + args, data, timeout_sec=timeout_sec)
+
+
+def _run_pbcopy_stream(data: bytes) -> str | None:
+    """macOS pbcopy via stdin pipe; returns error text, or None on success."""
+    if shutil.which("pbcopy") is None:
+        return "pbcopy not found"
+    try:
+        proc = subprocess.Popen(  # noqa: S603 - constant executable name
+            ["pbcopy"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as exc:
+        return f"pbcopy start failed: {exc}"
+
+    try:
+        _, stderr = proc.communicate(input=data, timeout=_MACOS_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        return "pbcopy timeout"
+    except OSError as exc:
+        proc.kill()
+        return f"pbcopy io error: {exc}"
+
+    if proc.returncode == 0:
+        return None
+
+    err_text = stderr.decode("utf-8", errors="replace").strip()
+    return err_text or "pbcopy failed"
 
 
 def copy_to_clipboard(text: str) -> ClipboardResult:
@@ -83,11 +125,10 @@ def copy_to_clipboard(text: str) -> ClipboardResult:
 
     # ── macOS ───────────────────────────────────────────────────
     if sys.platform == "darwin":
-        if _try_tool("pbcopy", [], data_utf8):
+        pb_err = _run_pbcopy_stream(data_utf8)
+        if pb_err is None:
             return ClipboardResult(ok=True, backend="pbcopy", error="")
-        return ClipboardResult(
-            ok=False, backend="", error="pbcopy not found",
-        )
+        return ClipboardResult(ok=False, backend="", error=pb_err)
 
     # ── Linux / BSD ─────────────────────────────────────────────
 
